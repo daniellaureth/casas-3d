@@ -1,6 +1,22 @@
 CASAS 3D - META QUEST 3 / 3S
 
-SEM FIO PELO AIR LINK (RECOMENDADO PARA ESTE NOTEBOOK)
+STANDALONE - SEM NOTEBOOK (RECOMENDADO)
+
+Nos oculos, abra o Meta Quest Browser e acesse:
+https://daniellaureth.github.io/casas-3d/
+
+Escolha planta e fachada e toque em "Entrar em VR".
+Analogico esquerdo: andar. Direito: girar em passos de 30 graus.
+Aponte o controle para a porta e aperte o gatilho para abrir ou fechar.
+B/Y ou "Minha casa": mudar as opcoes durante a visita.
+"Sair do VR" encerra a sessao. Nao precisa de cabo, Air Link ou servidor local.
+
+As atualizacoes enviadas para a branch main do repositorio casas-3d sao
+publicadas automaticamente. Recarregue a pagina nos oculos para atualizar.
+
+MODOS ANTERIORES COM NOTEBOOK (OPCIONAIS)
+
+SEM FIO PELO AIR LINK
 
 1. Conecte o Quest ao notebook pelo Air Link, como voce ja faz para
    enxergar a area de trabalho do computador nos oculos.

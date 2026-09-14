@@ -33,6 +33,8 @@ Todos os recursos estão incorporados no HTML: funciona sob `/casas-3d/` ou outr
 nome de repositório, sem configurar Vite/base. Não há Vite neste projeto.
 
 Para revisão local: `npm run dev`. Para revisar o build: `npm run preview`.
+Para conferir a publicação com Chrome no Windows:
+`node tests/check-standalone-browser.cjs --url=https://daniellaureth.github.io/casas-3d/`.
 Ambos exibem a URL local; isso é apenas desenvolvimento e não é necessário no Quest
 depois da publicação. Os atalhos Windows anteriores continuam disponíveis.
 

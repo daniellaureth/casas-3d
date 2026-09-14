@@ -3,7 +3,8 @@ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),asse
 const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
   const source=process.argv.includes('--source'),server=createServer({source});await new Promise(r=>server.listen(0,'127.0.0.1',r));
-  const base='http://127.0.0.1:'+server.address().port+'/casas-3d/';
+  const published=process.argv.find(arg=>arg.startsWith('--url='))?.slice(6);
+  const base=published||'http://127.0.0.1:'+server.address().port+'/casas-3d/';
   const profile=fs.mkdtempSync(path.join(os.tmpdir(),'casas-standalone-'));
   const browser=spawn(path.join(process.env.ProgramFiles,'Google/Chrome/Application/chrome.exe'),['--app=about:blank','--user-data-dir='+profile,'--no-first-run','--no-default-browser-check','--window-size=1440,1000','--remote-debugging-port=0','--force_high_performance_gpu'],{stdio:'ignore'});
   let ws;const report=[];
@@ -29,10 +30,10 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
       await send('Page.navigate',{url:base});
       let ready=false;for(let i=0;i<120;i++){if(await evaluate('document.readyState==="complete" && typeof casaDebug==="function"')){ready=true;break;}await delay(250);}assert.ok(ready,'loaded');await delay(1800);
       const state=await evaluate('({debug:casaDebug(),secure:isSecureContext,xr:!!navigator.xr,vrButton:document.getElementById("quest-vr").textContent})');
-      assert.equal(state.debug.graphics.lightweight,quest);assert.equal(state.debug.shadows,!quest);assert.ok(state.xr);assert.match(state.vrButton,/Entrar.*VR/);
+      assert.equal(state.debug.graphics.lightweight,quest);assert.equal(state.debug.shadows,!quest);assert.ok(state.secure);assert.ok(state.xr);assert.match(state.vrButton,/Entrar.*VR/);
       for(const model of ['50','60','62','69']){
         await evaluate(`document.getElementById('model').value='${model}';document.getElementById('model').dispatchEvent(new Event('change'));`);await settled();
-        const d=await evaluate('casaDebug()');assert.equal(d.model,model);assert.ok(d.frame.calls>0);report.push({source,quest,model,batch:d.batch,frame:d.frame,pixelRatio:d.pixelRatio});
+        const d=await evaluate('casaDebug()');assert.equal(d.model,model);assert.ok(d.frame.calls>0);report.push({source,url:base,quest,model,batch:d.batch,frame:d.frame,pixelRatio:d.pixelRatio});
       }
       // Exercise every existing facade and return to the default.
       for(let i=0;i<5;i++){await evaluate(`document.querySelectorAll('.facade-choice')[${i}].click()`);await delay(350);}
