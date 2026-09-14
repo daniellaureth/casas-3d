@@ -1,5 +1,5 @@
 // WebXR uses the same house geometry, doors and collision world as the desktop tour.
-function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, makeCurtain, prepare, prepareScene,lighting,createLoading,getTour=()=>null,updateEnvironment=()=>{},restore, getPhysics, invalidate, createPanel,createHand,createPointer,getConfiguration,changeConfiguration,airLink = /[?&]connection=airlink(?:&|$)/.test(window.location?.search || '') }) {
+function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, makeCurtain, prepare, prepareScene,lighting,createLoading,getTour=()=>null,restore, getPhysics, invalidate, createPanel,createHand,createPointer,getConfiguration,changeConfiguration,airLink = /[?&]connection=airlink(?:&|$)/.test(window.location?.search || '') }) {
   const button = document.getElementById('quest-vr');
   const status = document.getElementById('quest-status');
   const entryLabel = airLink ? 'Entrar na casa sem fio' : 'Entrar em VR · Quest';
@@ -136,7 +136,6 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   }
   function applyConfiguration(key,value) {
     if(key==='tour')return tourCommand(value);
-    if(key==='night'){setHouseNight(!!value);return value?'Modo noite.':'Modo dia.';}
     if(key==='amplitude') {
       amplitude=[1,1.4,2].includes(value)?value:1;
       camera.getWorldPosition(head);const before=head.clone();
@@ -174,7 +173,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     }
     if(!loading&&lastTime!==null&&time>lastTime&&time-lastTime<250){measuredSeconds+=(time-lastTime)/1000;measuredFrames++;}
     const delta = lastTime === null ? 0 : Math.min((time - lastTime) / 1000, 0.05);
-    lastTime = time;updateEnvironment(delta);
+    lastTime = time;
     rig.updateMatrixWorld(true);
     renderer.xr.updateCamera(camera);
     const xrCamera = renderer.xr.getCamera(), physics = getPhysics();

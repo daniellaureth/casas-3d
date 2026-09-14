@@ -26,12 +26,13 @@ O botão Sair do VR funciona também durante essa preparação.
 
 ## Atualizar
 
-### Tour automático e Dia/Noite
+### Tour automático
 
 Na barra superior, **Tour automático** inicia o passeio em primeira pessoa.
 O painel **Tour da casa** mostra o ambiente, Pausar, Continuar, Próximo ambiente,
 Ambiente anterior e Encerrar tour. No computador, P pausa/continua e Esc encerra.
-No VR, abra **Minha casa → Tour**. Durante o passeio, o botão Minha casa se transforma
+No VR, use o botão verde **Tour automático** no painel inicial. Ele também aparece
+em todas as abas; **Minha casa → Tour** reúne os controles completos. Durante o passeio, o botão Minha casa se transforma
 no painel compacto do tour; **Opções** reabre o menu completo.
 
 O tour movimenta apenas a base do jogador, a 0,85 m/s, com aceleração e parada suaves.
@@ -54,11 +55,7 @@ Exemplo de ajuste só para a planta de 50 m²:
 models: { '50': { kitchen: { u: 0.5, v: 0.7, dwell: 5 } } }
 ```
 
-**☀ Dia / 🌙 Noite** ficam na barra superior e em **Minha casa → Passeio** no VR.
-A mudança leva 1,8 segundo e funciona também durante o tour. O modo Noite escurece
-o céu e o exterior e usa cores quentes nos interiores, sem acrescentar luzes,
-sombras ou pós-processamento. As cores da iluminação do Quest são preparadas uma
-vez por geometria; a transição altera um único valor compartilhado pelos shaders.
+A iluminação anterior foi restaurada na versão 1.4.1; Dia/Noite foi removido.
 O cálculo das rotas usa um Worker local para preservar a resposta da renderização.
 Nenhum servidor adicional ou serviço externo é necessário.
 

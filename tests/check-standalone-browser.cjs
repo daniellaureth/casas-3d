@@ -28,7 +28,7 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
       errors.length=0;
       await send('Emulation.setUserAgentOverride',{userAgent:quest?'Mozilla/5.0 (Linux; Android 12; Quest 3S) AppleWebKit/537.36 OculusBrowser/40.0 Chrome/152.0.0.0 Safari/537.36':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152.0.0.0 Safari/537.36'});
       await send('Page.navigate',{url:base});
-      let ready=false;for(let i=0;i<120;i++){if(await evaluate('document.readyState==="complete" && typeof casaDebug==="function"')){ready=true;break;}await delay(250);}assert.ok(ready,'loaded');await delay(1800);
+      let ready=false;for(let i=0;i<240;i++){if(await evaluate('document.readyState==="complete" && typeof casaDebug==="function"')){ready=true;break;}await delay(250);}assert.ok(ready,'loaded '+JSON.stringify({errors,loading:await evaluate('window.CasaLoading?.state')}));await delay(1800);
       const state=await evaluate('({debug:casaDebug(),secure:isSecureContext,xr:!!navigator.xr,vrButton:document.getElementById("quest-vr").textContent})');
       assert.equal(state.debug.graphics.lightweight,quest);assert.equal(state.debug.shadows,!quest);assert.ok(state.secure);assert.ok(state.xr);assert.match(state.vrButton,/Entrar.*VR/);
       for(const model of ['50','60','62','69']){
@@ -41,12 +41,7 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
       if(process.argv.includes('--experiences')){
         const click=id=>evaluate('document.getElementById('+JSON.stringify(id)+').click()');
         const waitFor=async expression=>{for(let i=0;i<600;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out '+expression);};
-        const day=await evaluate('casaDebug()');await click('night');await delay(200);
-        assert.ok(await evaluate('casaDebug().nightMix>0 && casaDebug().nightMix<1'),'smooth night transition');
-        await waitFor('casaDebug().nightMix===1');const night=await evaluate('casaDebug()');
-        assert.deepEqual(night.resources,day.resources,'night reuses lights, geometry, textures and shader programs');
-        const dark=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-night-'+(quest?'quest':'desktop')+'.png'),Buffer.from(dark.data,'base64'));
-        await click('day');await waitFor('casaDebug().nightMix===0');
+        assert.equal(await evaluate('document.querySelectorAll("#day,#night").length'),0,'day/night removed');
         await click('auto-tour');await waitFor('casaDebug().automaticTour.phase!=="planning"');
         assert.equal(await evaluate('casaDebug().walking'),true,'tour starts from overview in first person');
         assert.equal(await evaluate('document.getElementById("tour-hud").hidden'),false);
@@ -54,14 +49,13 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
         await click('tour-resume');assert.equal(await evaluate('casaDebug().automaticTour.paused'),false);
         const index=await evaluate('casaDebug().automaticTour.index');await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),index+1);
         await click('tour-previous');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),index);
-        await click('night');await waitFor('casaDebug().nightMix===1');assert.equal(await evaluate('casaDebug().automaticTour.active'),true);
         const hud=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-tour-'+(quest?'quest':'desktop')+'.png'),Buffer.from(hud.data,'base64'));
         await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);assert.equal(await evaluate('casaDebug().walking'),true,'normal first-person controls restored');
         await click('auto-tour');await waitFor('casaDebug().automaticTour.phase!=="planning"');
         await evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape"}))');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
         await evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape"}))');assert.equal(await evaluate('casaDebug().walking'),false);
-        await click('day');await waitFor('casaDebug().nightMix===0');await settled();
-        report.push({quest,experiences:'passed',day:day.resources,night:night.resources,drawCalls:{day:day.frame.calls,night:night.frame.calls}});
+        await settled();
+        report.push({quest,experiences:'passed',resources:await evaluate('casaDebug().resources')});
       }
       const shot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-'+(source?'source-':'production-')+(quest?'quest':'desktop')+'.png'),Buffer.from(shot.data,'base64'));
       assert.deepEqual(errors,[],'no console, network or WebGL errors');

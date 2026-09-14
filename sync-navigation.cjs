@@ -55,7 +55,7 @@ if (!html.includes('id="walk-settings"')) {
   replaceOnce('boundaryVisible:()=>et("boundary").checked}),dc(hn)}function lc', 'boundaryVisible:()=>et("boundary").checked}),walkMode?.refreshHouse(),dc(hn)}function lc');
   replaceOnce('</style>', '\n#walk-settings{display:none}.walking #walk-settings{display:block!important}.walking.walk-settings-open aside{display:block;bottom:85px;max-height:calc(100vh - 120px)}#walk-message{font-size:11px;line-height:1.4;color:#53664a}.walking.walk-settings-open .hint{max-width:calc(100% - 32px)}\n</style>');
 }
-const parts = ['walk-layout.js', 'walk-physics.js', 'walk-camera.js','tour-config.js','house-tour.js','tour-worker.js','day-night.js'];
+const parts = ['walk-layout.js', 'walk-physics.js', 'walk-camera.js','tour-config.js','house-tour.js','tour-worker.js'];
 if (!html.includes('if(walkMode?.active||questMode?.active)return;')) {
   replaceOnce('function As(i=!1){if(walkMode?.active)return;', 'function As(i=!1){if(walkMode?.active||questMode?.active)return;');
   replaceOnce('function lc(){ee.setSize', 'function lc(){if(questMode?.active)return;ee.setSize');

@@ -39,15 +39,17 @@ test('stereo panel choices work by ray and unavailable garage choices cannot app
 test('every panel control stays within the canvas and hand pinch uses the same ray hit path',()=>{
   const f=panelFixture();
   for(const tab of ['casa','terreno','passeio','visao','tour']){
-    f.select('tab-'+tab);for(const b of f.panel.buttons)assert.ok(b.x>=0&&b.y>=0&&b.x+b.w<=1040&&b.y+b.h<=710,b.id+' bounds');
+    f.select('tab-'+tab);for(const b of f.panel.buttons)assert.ok(b.x>=0&&b.y>=0&&b.x+b.w<=1040&&b.y+b.h<=772,b.id+' bounds');
   }
   const backwardRay=new T.Group();backwardRay.position.set(0,1.65,0);backwardRay.rotation.y=Math.PI;
   assert.equal(f.panel.select(backwardRay),false);f.panel.dispose();
 });
 
-test('day/night and compact tour buttons receive controller rays in the existing menu',()=>{
-  const f=panelFixture();f.select('tab-passeio');f.select('night');assert.equal(f.state.night,true);f.select('day');assert.equal(f.state.night,false);
-  f.select('tab-tour');f.select('tour-start');assert.deepEqual(f.changes.at(-1),['tour','start']);
+test('tour starts from the initial VR panel and remains accessible on every tab without day/night',()=>{
+  const f=panelFixture();f.select('tour-quick');assert.deepEqual(f.changes.at(-1),['tour','start']);
+  for(const tab of ['casa','terreno','passeio','visao','tour']){
+    f.select('tab-'+tab);assert.ok(f.panel.buttons.some(b=>b.id==='tour-quick'));assert.ok(!f.panel.buttons.some(b=>b.id==='day'||b.id==='night'));
+  }
   f.state.tour={active:true,paused:false,label:'Sala de estar',revision:1};f.panel.close();f.panel.update([],'');
   const children=f.camera.children.length,sceneChildren=f.scene.children.length;
   function selectDock(index,action){

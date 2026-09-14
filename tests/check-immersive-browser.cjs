@@ -48,20 +48,18 @@ function installXR(){
     const click=async id=>{await evaluate('pointXR('+JSON.stringify(id)+')');await delay(40);await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');};
     const waitFor=async expression=>{for(let i=0;i<400;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out: '+expression+' '+JSON.stringify(await evaluate('casaDebug()')));};
     const menu=async()=>{await evaluate('testSession.inputSources[0].gamepad.buttons[5]={pressed:true}');await delay(50);await evaluate('testSession.inputSources[0].gamepad.buttons[5].pressed=false');await delay(50);};
-    await click('tab-passeio');const before=await evaluate('casaDebug()');await click('night');await delay(150);assert.ok((await evaluate('casaDebug().nightMix'))>0);assert.ok((await evaluate('casaDebug().nightMix'))<1);await waitFor('casaDebug().nightMix===1');
-    const night=await evaluate('casaDebug()');assert.equal(night.resources.lights,before.resources.lights);assert.equal(night.resources.geometries,before.resources.geometries);assert.equal(night.resources.textures,before.resources.textures);
-    const dark=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-night.png'),Buffer.from(dark.data,'base64'));
-    await click('day');await waitFor('casaDebug().nightMix===0');
-    await click('tab-tour');await click('tour-start');assert.equal(await evaluate('casaDebug().automaticTour.active'),true);
-    await waitFor('casaDebug().automaticTour.phase!=="planning"');await menu();await click('tour-pause');const paused=await evaluate('casaDebug().vr.head');await delay(250);assert.deepEqual(await evaluate('casaDebug().vr.head'),paused);
+    const before=await evaluate('casaDebug()');assert.equal(await evaluate('document.querySelectorAll("#day,#night").length'),0);
+    await click('tour-quick');assert.equal(await evaluate('casaDebug().automaticTour.active'),true);
+    await waitFor('casaDebug().automaticTour.phase!=="planning"');await menu();await click('tab-tour');await click('tour-pause');const paused=await evaluate('casaDebug().vr.head');await delay(250);assert.deepEqual(await evaluate('casaDebug().vr.head'),paused);
     await click('tour-resume');assert.equal(await evaluate('casaDebug().automaticTour.paused'),false);
     await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),1);
+    const origin=await evaluate('casaDebug().vr.head');await waitFor('Math.hypot(casaDebug().vr.head[0]-('+origin[0]+'),casaDebug().vr.head[2]-('+origin[2]+'))>.15');
+    const tourShot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-tour.png'),Buffer.from(tourShot.data,'base64'));
     await click('tour-previous');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),0);
-    await click('tab-passeio');await click('night');await waitFor('casaDebug().nightMix===1');assert.equal(await evaluate('casaDebug().automaticTour.active'),true);
     await click('tab-tour');await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
     await click('tour-start');await evaluate('testSession.end()');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
-    await evaluate('document.getElementById("quest-vr").click()');await waitFor('casaDebug().vr.active&&casaDebug().vr.panelOpen');assert.equal(await evaluate('casaDebug().nightMix'),1);assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
-    console.log('VR experiences',JSON.stringify({day:before,night,after:await evaluate('casaDebug()')}));
+    await evaluate('document.getElementById("quest-vr").click()');await waitFor('casaDebug().vr.active&&casaDebug().vr.panelOpen');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
+    console.log('VR experiences',JSON.stringify({before,after:await evaluate('casaDebug()')}));
   }
   if(!process.argv.includes('--experiences')){await evaluate('pointXR("close")');await delay(50);await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');assert.equal(await evaluate('casaDebug().vr.panelOpen'),false);}
   assert.deepEqual(errors,[]);await evaluate('testSession.end()');assert.equal(await evaluate('casaDebug().vr.active'),false);await send('Browser.close');

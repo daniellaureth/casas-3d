@@ -67,11 +67,9 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
       item('furniture','Móveis: '+(s.furniture?'sim':'não'),35,195,312,60,()=>choose('furniture',!s.furniture),s.furniture);
       item('light',s.evening?'Entardecer: sim':'Entardecer: não',361,195,312,60,()=>choose('light',!s.evening),s.evening);
       item('boundary','Muros: '+(s.boundary?'sim':'não'),687,195,318,60,()=>choose('boundary',!s.boundary),s.boundary);
-      item('day','☀ Dia',35,267,475,54,()=>choose('night',false),!s.night);
-      item('night','🌙 Noite',530,267,475,54,()=>choose('night',true),!!s.night);
-      text('IR PARA UM AMBIENTE',35,358,22);
-      s.destinations.forEach((d,i)=>item('go-'+d.id,d.name,35+(i%3)*326,380+Math.floor(i/3)*66,312,56,()=>{message=navigate(d.id)||'';draw();}));
-      const y=380+Math.ceil(s.destinations.length/3)*66+18;
+      text('IR PARA UM AMBIENTE',35,303,22);
+      s.destinations.forEach((d,i)=>item('go-'+d.id,d.name,35+(i%3)*326,325+Math.floor(i/3)*66,312,56,()=>{message=navigate(d.id)||'';draw();}));
+      const y=325+Math.ceil(s.destinations.length/3)*66+18;
       item('door','Abrir / fechar a porta à frente',35,y,970,58,()=>{message=door()?'Porta acionada.':'Olhe para uma porta próxima e tente novamente.';draw();});
     } else if(page==='tour') {
       const tour=s.tour||{};
@@ -90,7 +88,10 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
       wrap('É um ajuste visual. Para avaliar as dimensões reais da casa, escolha Normal.',35,495,940,26);
       wrap('Escolha a opção mais confortável para o seu passeio.',35,601,940,26);
     }
-    wrap(message||'Suas escolhas permanecem ao continuar o passeio.',35,732,970,22);
+    item('tour-quick',s.tour?.active?'Controles do tour':'▶ Tour automático',35,710,475,62,()=>{
+      if(s.tour?.active){page='tour';message='';draw();}else choose('tour','start');
+    },true);
+    wrap(message||'Suas escolhas permanecem ao continuar o passeio.',530,732,475,22);
     text(inputHint,35,792,21,'#637364');texture.needsUpdate=true;
   }
   function place(head,forward) {

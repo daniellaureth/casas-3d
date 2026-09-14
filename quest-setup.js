@@ -7,11 +7,11 @@ function questConfiguration() {
   return {model:et('model').value,models:Array.from(et('model').options,o=>({value:o.value,label:o.value+' m²'})),
     modelDescription:et('model').selectedOptions[0].textContent,facades:ps.map(f=>f.name),facade:options.facade,
     high:options.high,garage:options.garage,garageSpaces:options.garageSpaces,twoSpaces:!et('garage-spaces').options[1].disabled,
-    width:Re.width,depth:Re.depth,furniture:!!Zn,evening:vs,night:!!dayNight?.night,tour:houseTour?.state,boundary:et('boundary').checked,destinations};
+    width:Re.width,depth:Re.depth,furniture:!!Zn,evening:vs,tour:houseTour?.state,boundary:et('boundary').checked,destinations};
 }
 function questBatchHouse() {
   hn=100;Xe=0;Un=Number(Zn);Vn=false;De=null;Bn=null;dc(100);
-  bd();bn=Wm(ue);Tn.add(bn);Eo=gs;ue.visible=false;bn.visible=true;dayNight?.refresh();
+  bd();bn=Wm(ue);Tn.add(bn);Eo=gs;ue.visible=false;bn.visible=true;
 }
 function questChangeConfiguration(key,value) {
   et('configuration-error').textContent='';et('lot-error').textContent='';
@@ -30,8 +30,8 @@ function questChangeConfiguration(key,value) {
     (key==='garage'||key==='garageSpaces'?et('garage-status').textContent:'')||'Escolha aplicada.';
 }
 questMode=createQuestVR({renderer:ee,scene:Tn,camera:Je,controls:xe,Group:Ce,Vector3:q,
-  getTour:()=>houseTour,updateEnvironment:delta=>dayNight?.update(delta),
-  lighting:questProfile.lightweight?createQuestLighting({scene:Tn,MeshBasicMaterial:zo,BufferAttribute:me,Vector3:q,Matrix3:Jt,getEvening:()=>vs,getPlan:()=>ue.userData.plan,nightUniform:CASA_NIGHT_UNIFORM}):null,
+  getTour:()=>houseTour,
+  lighting:questProfile.lightweight?createQuestLighting({scene:Tn,MeshBasicMaterial:zo,BufferAttribute:me,Vector3:q,Matrix3:Jt,getEvening:()=>vs}):null,
   createLoading(options){return createQuestLoading({...options,Scene:Jo,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,Vector3:q});},
   getConfiguration:questConfiguration,changeConfiguration:questChangeConfiguration,
   createPanel(options){return createQuestPanel({...options,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,Vector3:q});},
