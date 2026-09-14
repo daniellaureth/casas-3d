@@ -39,6 +39,9 @@ O tour movimenta apenas a base do jogador, a 0,85 m/s, com aceleração e parada
 A cabeça continua livre. Caminhada manual e giro pelo analógico ficam suspensos até
 encerrar o tour; menu e saída do VR continuam disponíveis. As portas necessárias
 abrem automaticamente, respeitando as colisões. Curvas fechadas usam um breve fade.
+No VR, o percurso acompanha uma posição virtual estável, independente dos pequenos
+movimentos da cabeça. Assim, cada parada termina e o próximo ambiente inicia
+automaticamente, sem exigir que o visitante fique imóvel.
 Sair do VR ou trocar a planta encerra o tour. Abrir o menu do sistema Meta suspende
 o avanço enquanto a sessão estiver sem foco.
 

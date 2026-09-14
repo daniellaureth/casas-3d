@@ -1,9 +1,18 @@
-# Tour automático — versão 1.4.1
+# Tour automático — versão 1.4.2
 
-Backup anterior à revisão: `backups/antes-remover-dia-noite.bundle`.
-Base: `da37dd9`. O backup fica local, fora da publicação.
+Backup anterior à revisão: `backups/antes-corrigir-tour-vr-entrada.bundle`.
+Base: `ded8d0a`. O backup fica local, fora da publicação.
 
 ## Alterações desta revisão
+
+- Reprodução do travamento na entrada com movimentos de cabeça de 3–4 mm a 72 Hz:
+  a versão anterior continuava em `Entrada / moving` depois de 25 segundos.
+- O tour agora mantém um corpo virtual independente do rastreamento da cabeça.
+  A base recebe apenas o deslocamento calculado do percurso; a cabeça continua livre.
+- A precisão das curvas e as colisões permanecem iguais. Não foi ampliada a tolerância
+  dos pontos para cortar cantos ou atravessar paredes.
+
+## Recursos preservados
 
 - Dia/Noite removido dos controles, da sincronização e dos shaders.
 - Iluminação Quest restaurada integralmente do commit `2a1cd39`, anterior ao recurso.
@@ -21,6 +30,10 @@ Base: `da37dd9`. O backup fica local, fora da publicação.
 - Cancelamento durante preparação, saída e reentrada em VR sem erro de console.
 - Testes de rotas nas quatro plantas, colisões, orientação nativa da cabeça,
   analógicos, carregamento estéreo e restauração dos controles ao sair.
+- Percurso VR completo nas quatro plantas com movimento contínuo da cabeça,
+  sem usar Próximo: 9, 9, 10 e 10 paradas, respectivamente.
+- Verificação no Chrome com Worker e renderização estéreo: a entrada e a sala
+  avançam automaticamente mesmo com pequenas oscilações da posição rastreada.
 
 O teste WebXR usa o gerenciador real do Three.js com poses e sessão simuladas no
 Chrome. Ele não substitui a medição de desempenho e conforto no Quest físico.

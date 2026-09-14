@@ -6,6 +6,9 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   let active = false, pending = false, session = null, rig = null, saved = null;
   let lastTime = null, lastSafeHead = null, snapReady = true, curtain = null;
   const head = new Vector3(), direction = new Vector3();
+  // The tour follows a stable virtual body. Tracked head motion must not move
+  // the route's arrival target or be canceled by translating the rig backwards.
+  const tourBody={x:0,y:0,z:0};let tourOwner=null;
   const rayOrigin=new Vector3(),rayDirection=new Vector3();
   const rayControllers = [];
   const handVisuals=[],pointers=[];
@@ -42,6 +45,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     if (!saved) return;
     active = false;
     if(getTour()?.state.active)getTour().stop();
+    tourOwner=null;
     pending = false;
     renderer.setAnimationLoop(null);
     handWalk?.reset();
@@ -131,8 +135,9 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   }
   function tourCommand(action){
     if(loading)return 'Aguarde o carregamento do VR.';
-    camera.getWorldPosition(head);const position={x:head.x,y:floorLevel+getPhysics().eyeHeight,z:head.z};
-    try{getTour()?.action(action,position);if(action==='start')panel?.close();return getTour()?.state.message||'Tour atualizado.';}catch(error){return error.message;}
+    camera.getWorldPosition(head);const tour=getTour();
+    if(action==='start'||tourOwner!==tour){tourBody.x=head.x;tourBody.y=floorLevel+getPhysics().eyeHeight;tourBody.z=head.z;tourOwner=tour;}
+    try{tour?.action(action,tourBody);if(action==='start')panel?.close();return tour?.state.message||'Tour atualizado.';}catch(error){return error.message;}
   }
   function applyConfiguration(key,value) {
     if(key==='tour')return tourCommand(value);
@@ -217,6 +222,9 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     }
     if(menuDown&&!menuPressed&&panel){if(panel.visible)panel.close();else panel.open(head,direction);}menuPressed=menuDown;
     const tour=getTour();
+    const automatic=!!tour?.state.active;
+    if(!automatic)tourOwner=null;
+    else if(tourOwner!==tour){tourBody.x=head.x;tourBody.y=floorLevel+physics.eyeHeight;tourBody.z=head.z;tourOwner=tour;}
     if(panel?.visible||tour?.state.active)forward=right=turn=0;
     rig.updateMatrixWorld(true);
     const trackedHands=handVisuals.filter(item=>item.visual.update()).map(item=>item.hand);
@@ -229,10 +237,12 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       if (Math.abs(forward)<0.18) forward=0;
       if (Math.abs(right)<0.18) right=0;
       const inputLength = Math.max(1,Math.hypot(forward,right)), step=1.5*delta/inputLength;
-      const body = {x:head.x,y:floorLevel+physics.eyeHeight,z:head.z};
-      if(tour?.state.active)tour.update(body,delta);else physics.move(body,(fx*forward-fz*right)*step+handMotion.x*delta,(fz*forward+fx*right)*step+handMotion.z*delta,delta);
-      rig.position.x += body.x-head.x; rig.position.z += body.z-head.z;
-      const nextFloor=body.y-physics.eyeHeight;rig.position.y+=nextFloor-floorLevel;floorLevel=nextFloor;
+      const body = automatic?tourBody:{x:head.x,y:floorLevel+physics.eyeHeight,z:head.z};
+      const fromX=body.x,fromZ=body.z;
+      if(automatic)tour.update(body,delta);else physics.move(body,(fx*forward-fz*right)*step+handMotion.x*delta,(fz*forward+fx*right)*step+handMotion.z*delta,delta);
+      const moveX=body.x-fromX,moveZ=body.z-fromZ;
+      rig.position.x += moveX; rig.position.z += moveZ;
+      const nextFloor=body.y-physics.eyeHeight,moveY=nextFloor-floorLevel;rig.position.y+=moveY;floorLevel=nextFloor;
       if (Math.abs(turn)<0.25) snapReady=true;
       if (Math.abs(turn)>0.65 && snapReady) {
         snapReady=false;
@@ -243,8 +253,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
         const after=camera.getWorldPosition(new Vector3());
         rig.position.x+=before.x-after.x; rig.position.z+=before.z-after.z;
       }
-      lastSafeHead={x:body.x,y:body.y,z:body.z};
-      physics.update(delta,lastSafeHead);
+      lastSafeHead=automatic?{x:head.x+moveX,y:head.y+moveY,z:head.z+moveZ}:{x:body.x,y:body.y,z:body.z};
+      physics.update(delta,automatic?tourBody:lastSafeHead);
     }
     rig.updateMatrixWorld(true);
     const visibleHands=trackedHands.length>0;

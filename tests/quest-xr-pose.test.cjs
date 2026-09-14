@@ -5,7 +5,7 @@ function fixture(model='50',panelFactory,extra={}) {
   const errors=[];let clock=0,monitor=null;
   class Layer {constructor(){this.framebuffer={};this.framebufferWidth=2000;this.framebufferHeight=1000;}getViewport(view){return {x:view.eye==='left'?0:1000,y:0,width:1000,height:1000};}}
   const ctx=VM.createContext({console:{...console,error:(...args)=>errors.push(args)},AbortController,performance:{now:()=>clock},setInterval(fn){monitor=fn;return 1;},clearInterval(){monitor=null;},URL,queueMicrotask,XRWebGLLayer:Layer,navigator:{userAgent:'Android OculusBrowser Quest 3S'},window:{isSecureContext:true},document:{getElementById:id=>elements[id],body:{classList:{add(){},remove(){}}}}});
-  VM.runInContext(html.slice(html.indexOf('// BEGIN QUEST GRAPHICS'),html.indexOf('let walkPhysics=null'))+['walk-layout.js','walk-physics.js','quest-vr.js'].map(f=>fs.readFileSync(path.join(root,f),'utf8')).join('\n')+';globalThis.api={XRManager:vm,Group:Ce,Vector3:q,Quaternion:ii,Matrix4:$t,PerspectiveCamera:Qe,xx,Box3:si,createHousePhysics,createQuestVR};',ctx);
+  VM.runInContext(html.slice(html.indexOf('// BEGIN QUEST GRAPHICS'),html.indexOf('let walkPhysics=null'))+['walk-layout.js','walk-physics.js','tour-config.js','house-tour.js','quest-vr.js'].map(f=>fs.readFileSync(path.join(root,f),'utf8')).join('\n')+';globalThis.api={XRManager:vm,Group:Ce,Vector3:q,Quaternion:ii,Matrix4:$t,PerspectiveCamera:Qe,xx,Box3:si,createHousePhysics,createQuestVR,createHouseTour,config:CASA_TOUR_CONFIG};',ctx);
   const T=ctx.api,house=T.xx(model,{width:15,depth:30}),physics=T.createHousePhysics(house,{Box3:T.Box3});
   const camera=new T.PerspectiveCamera(38,1,.1,500),scene=new T.Group(),controls={enabled:true};camera.position.set(4,6,8);
   let callback,curtain;const listeners=new Map();
@@ -25,8 +25,27 @@ function fixture(model='50',panelFactory,extra={}) {
     callback(time,{getViewerPose:()=>tracked?{views}:null});
     return {head:camera.getWorldPosition(new T.Vector3()).toArray(),curtain:curtain.visible,rig:camera.parent?.position.toArray(),tracking:rotation};
   }
-  return {mode,tick,physics,camera,session,renderer,errors,advanceClock(ms){clock+=ms;monitor?.();}};
+  return {mode,tick,physics,house,api:T,camera,session,renderer,errors,advanceClock(ms){clock+=ms;monitor?.();}};
 }
+
+test('automatic tour leaves the entrance and visits rooms with continuous tracked head motion',async()=>{
+  for(const model of ['50','60','62','69'].filter(m=>!process.env.TOUR_MODEL||process.env.TOUR_MODEL===m)){
+    let tour;const f=fixture(model,undefined,{getTour:()=>tour});
+    tour=f.api.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=>model});
+    await f.mode.enter();f.tick(0);f.mode.tourAction('start');const seen=new Set();let i=0;
+    while(tour.state.active&&i++<72*400){
+      const pose=f.tick(i*1000/72,{x:.004*Math.sin(i*.17),z:.003*Math.cos(i*.21),yaw:.15*Math.sin(i*.04),pitch:.05*Math.sin(i*.03),roll:.02*Math.cos(i*.06)});
+      seen.add(tour.state.index);assert.equal(tour.state.paused,false,model+' '+JSON.stringify(tour.state));
+      assert.equal(pose.curtain&&tour.state.fade===0,false,model+' wall protection');
+      assert.ok(f.camera.quaternion.angleTo(pose.tracking)<1e-7,'head remains tracked');
+      if(i===72*25)assert.ok(tour.state.index>0,'must automatically leave Entrada: '+JSON.stringify(tour.state));
+    }
+    assert.equal(tour.state.active,false,model+' completes every room: '+JSON.stringify(tour.state));
+    assert.equal(seen.size,tour.points.length);assert.equal(f.mode.active,true);assert.ok(f.physics.doors.some(d=>Math.abs(d.angle)>.1));
+    console.log(JSON.stringify({vrModel:model,visited:seen.size,simulatedSeconds:i/72}));
+    await f.mode.end();assert.deepEqual(f.errors,[]);
+  }
+});
 test('real Three XR manager keeps a stationary tracked head outside walls',async()=>{
   for(const model of ['50','60','62','69']) {
     const f=fixture(model);await f.mode.enter();
@@ -46,7 +65,8 @@ test('automatic VR travel leaves head yaw, pitch and roll tracked and ignores ma
     assert.ok(f.camera.parent.quaternion.angleTo(rigRotation)<1e-7,'manual snap turn suppressed');
   }
   assert.ok(updates>0);assert.ok(f.camera.parent.position.x>initial.x);assert.ok(Math.abs(f.camera.parent.position.z-initial.z)<1e-7,'manual walking suppressed');
-  tour.state.paused=true;const paused=f.camera.parent.position.clone();f.tick(140,{yaw:1,pitch:.4,roll:.2});assert.ok(f.camera.parent.position.distanceTo(paused)<1e-7);
+  tour.state.paused=true;const paused=f.camera.parent.position.clone();const tracked=f.tick(140,{x:.06,z:.03,yaw:1,pitch:.4,roll:.2});assert.ok(f.camera.parent.position.distanceTo(paused)<1e-7);
+  const movedHead=f.tick(154,{x:.09,z:.03,yaw:1,pitch:.4,roll:.2});assert.ok(Math.abs(movedHead.head[0]-tracked.head[0]-.03)<1e-7,'physical translation stays free during pause');
   f.session.visibilityState='visible-blurred';const count=updates;f.tick(160);assert.equal(updates,count,'system menu suspends tour');
   await f.mode.end();assert.equal(tour.state.active,false);await f.mode.enter();f.tick(200);assert.equal(tour.state.active,false);await f.mode.end();assert.deepEqual(f.errors,[]);
 });
