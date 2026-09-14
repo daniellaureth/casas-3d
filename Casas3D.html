@@ -5524,13 +5524,17 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
   const altitude=Math.max(config.exteriorHeight??3.8,Math.min(4.5,(physics.roofTop||4)*.8));
   const orbitRadius=Math.hypot(site.x1-site.x0,site.z1-site.z0)/2+3;
   const exteriorFocus={x:center.x,y:1.6,z:center.z};
-  function aerial(p){return p.kind==='aerial'||p.y>physics.floorAt(p.x,p.z)+eye+.25;}
+  function aerial(p){
+    // Standing up/recentring the headset indoors does not put the visitor above
+    // the roof. Connect to the indoor route before attempting an exterior flight.
+    const indoors=Math.abs(p.x)<plan.w/2+.4&&Math.abs(p.z)<plan.d/2+.4&&p.y<(physics.roofTop||4)+.1;
+    return p.kind==='aerial'||(!indoors&&p.y>physics.floorAt(p.x,p.z)+eye+.25);
+  }
   function viewHeading(p,focus){return Math.atan2(p.x-focus.x,p.z-focus.z);}
   const flightBoxes=[...physics.boxes.filter(b=>b.kind!=='furniture'&&(!b.enabled||b.enabled())),...(physics.flightBoxes||[])];
   const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
-  function flightClear(a,b){
+  function flightClear(a,b,pad=.08){
     // Slab intersection against expanded architecture, including roof overhangs.
-    const pad=.08;
     for(const box of flightBoxes){let lo=0,hi=1;
       for(const [axis,min,max] of [['x',box.minX-pad,box.maxX+pad],['y',box.bottom-pad,box.top+pad],['z',box.minZ-pad,box.maxZ+pad]]){
         const d=b[axis]-a[axis];if(Math.abs(d)<1e-9){if(a[axis]<min||a[axis]>max){lo=2;break;}continue;}
@@ -5541,6 +5545,29 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
     return true;
   }
   function groundRoute(from,to){
+    // A tracked eye can be clear while its walking-body margin overlaps a wall
+    // or cupboard. Join a reachable grid cell with a checked camera-sized lead-in;
+    // repeating the same blocked walking start would otherwise fail forever.
+    const raised=from.y>physics.floorAt(from.x,from.z)+eye+.2;
+    if(raised||physics.blockedForTour(from.x,from.z,true,eye)){
+      const finish=nearest(to);flood(finish);const candidates=[];
+      for(let id=0;id<count;id++){
+        if(!free[id]||parent[id]===-2)continue;const p=coords(id),d=Math.hypot(p.x-from.x,p.z-from.z);
+        if(d>2)continue;p.y=physics.floorAt(p.x,p.z)+eye;candidates.push({p,d});
+      }
+      candidates.sort((a,b)=>a.d-b.d);
+      for(const {p} of candidates){
+        if(!flightClear(from,p,.025))continue;
+        const n=Math.max(1,Math.ceil(distance(from,p)/.025));let clearDoors=true;
+        for(let i=0;i<=n&&clearDoors;i++){
+          const t=i/n,x=from.x+(p.x-from.x)*t,z=from.z+(p.z-from.z)*t,y=from.y+(p.y-from.y)*t;
+          clearDoors=!physics.doors.some(d=>y>(d.bottom??0)&&y<(d.top??2.3)&&physics.hitsDoor(x,z,d,d.openAngle,.025));
+        }
+        if(!clearDoors)continue;const rest=groundRoute(p,to);
+        if(rest)return [{...from},...rest];
+      }
+      return null;
+    }
     const start=nearest(from),finish=nearest(to);flood(start);if(finish<0||parent[finish]===-2)return null;
     const raw=[];for(let id=finish;id>=0;id=parent[id])raw.push(coords(id));raw.reverse();raw.unshift({x:from.x,z:from.z});
     const result=[raw[0]];let i=0;while(i<raw.length-1){let end=raw.length-1;while(end>i+1&&!clear(raw[i],raw[end]))end--;if(!clear(raw[i],raw[end]))return null;result.push(raw[end]);i=end;}

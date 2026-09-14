@@ -12,7 +12,7 @@ function installXR(){
     updateRenderState(state){Object.assign(this.renderState,state);}
     requestReferenceSpace(){return Promise.resolve({});}
     requestAnimationFrame(fn){return requestAnimationFrame(t=>{
-      if(this.ended)return;const x=window.testHeadMotion?.004*Math.sin(t*.012):0,z=window.testHeadMotion?.003*Math.cos(t*.015):0;
+      if(this.ended)return;const x=(window.testHeadOffset?.x||0)+(window.testHeadMotion?.004*Math.sin(t*.012):0),z=(window.testHeadOffset?.z||0)+(window.testHeadMotion?.003*Math.cos(t*.015):0);
       fn(t,window.lastXRFrame={session:this,getViewerPose:()=>({transform:{matrix:matrix(x,1.15,z)},views:['left','right'].map(eye=>({eye,projectionMatrix:projection,transform:{matrix:matrix(x+(eye==='left'?-.032:.032),1.15,z)}}))}),getPose:()=>({transform:{matrix:window.testRayMatrix||matrix(0,.9,-.3)}})});
     });}
     cancelAnimationFrame(id){cancelAnimationFrame(id);}
@@ -56,6 +56,14 @@ function installXR(){
     const waitFor=async(expression,attempts=3000)=>{for(let i=0;i<attempts;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out: '+expression+' '+JSON.stringify(await evaluate('casaDebug()')));};
     const menu=async()=>{await evaluate('testSession.inputSources[0].gamepad.buttons[5]={pressed:true}');await delay(50);await evaluate('testSession.inputSources[0].gamepad.buttons[5].pressed=false');await delay(50);};
     const before=await evaluate('casaDebug()');assert.equal(await evaluate('document.querySelectorAll("#day,#night").length'),0);
+    if(process.argv.includes('--blocked-start')){
+      await evaluate('window.testHeadOffset={x:1,z:-1}');await delay(150);await click('tour-quick');
+      await waitFor('casaDebug().automaticTour.phase!=="planning"');
+      assert.equal(await evaluate('casaDebug().automaticTour.paused'),false,'camera-clear start near the entrance must not report an unavailable route');
+      await waitFor('casaDebug().automaticTour.index>=2&&!casaDebug().automaticTour.paused');
+      console.log('Actual Worker + XR tracked offset: entrance, living room and kitchen reached',JSON.stringify(await evaluate('casaDebug().automaticTour')));
+      await menu();await click('tab-passeio');await click('go-entry');
+    }
     if(process.argv.includes('--resume-regression')){
       await evaluate('window.failNextTourBuild=true');await click('tour-quick');
       await waitFor('casaDebug().automaticTour.paused&&casaDebug().automaticTour.phase==="error"');

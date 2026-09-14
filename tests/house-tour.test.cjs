@@ -9,6 +9,30 @@ test('canceling route preparation ignores late worker results and releases the p
 function fixture(model){const house=T.xx(model,{width:15,depth:30}),physics=T.createHousePhysics(house,{Box3:T.Box3}),position={...physics.spawn,y:physics.floorAt(physics.spawn.x,physics.spawn.z)+physics.eyeHeight};
  const tour=T.createHouseTour({getPhysics:()=>physics,getPlan:()=>house.userData.plan,getModel:()=>model,config:{...T.config,dwell:.05,stops:T.config.stops.map(s=>({...s,dwell:.05}))}});return {house,physics,position,tour};}
 
+test('69 m² starts near entrance obstacles instead of repeatedly reporting an unavailable route',()=>{
+ const house=T.xx('69',{width:12,depth:21}),physics=T.createHousePhysics(house,{Box3:T.Box3});
+ const position={x:physics.spawn.x+1,y:1.7,z:physics.spawn.z-1};
+ assert.equal(physics.headBlocked(position.x,position.z,position.y),false);
+ assert.equal(physics.blockedForTour(position.x,position.z,true,1.95),true,'head is clear but walking-body margin is blocked');
+ const tour=T.createHouseTour({getPhysics:()=>physics,getPlan:()=>house.userData.plan,getModel:()=> '69'});
+ tour.start(position);assert.equal(tour.state.paused,false,JSON.stringify(tour.state));
+ for(let i=0;i<2000&&tour.state.index<2;i++){tour.update(position,.05);physics.update(.05,null);assert.equal(physics.headBlocked(position.x,position.z,position.y),false);assert.equal(tour.state.paused,false);}
+ assert.ok(tour.state.index>=2,'automatically reaches the living room and continues to the kitchen');tour.stop();
+});
+
+test('raised tracked eyes inside every house descend smoothly before doorways instead of routing through the roof',()=>{
+ for(const model of ['50','60','62','69']){
+  const f=fixture(model),nav=T.buildHouseTour({physics:f.physics,plan:f.house.userData.plan,model,position:f.position});
+  for(const point of nav.points.filter(p=>p.roomName)){
+   const from=[0,.1,-.1].map(dx=>({x:point.x+dx,z:point.z,y:f.physics.floorAt(point.x+dx,point.z)+2.3})).find(p=>nav.flightClear(p,p,.025));
+   assert.ok(from,model+' '+point.label+' has a raised viewpoint clear of lintels');
+   const path=nav.route(from,nav.points[0]);
+   assert.ok(path,model+' '+point.label+' must connect a raised headset to the entrance');
+   for(let i=1;i<path.length;i++)assert.ok(nav.flightClear(path[i-1],path[i],.025),model+' '+point.label+' crosses architecture');
+  }
+ }
+});
+
 test('Continue after a failed initial preparation recreates the planner and actually leaves the entrance',async()=>{
  const f=fixture('50');let attempts=0,disposed=0;
  const tour=T.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=> '50',plannerFactory:()=>({
