@@ -5,7 +5,7 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
 function installXR(){
   window.XRWebGLBinding=undefined;
   WebGL2RenderingContext.prototype.makeXRCompatible=async function(){};
-  const matrix=(x,y,z)=>[1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1];
+  const matrix=(x,y,z)=>{const c=Math.cos(window.testPitch||0),s=Math.sin(window.testPitch||0);return [1,0,0,0,0,c,s,0,0,-s,c,0,x,y,z,1];};
   const projection=[1,0,0,0,0,1,0,0,0,0,-1.0004,-1,0,0,-.20004,0];
   class Session extends EventTarget {
     constructor(){super();this.inputSources=[];this.enabledFeatures=['local-floor'];this.renderState={};this.visibilityState='visible';this.environmentBlendMode='opaque';this.ended=false;}
@@ -25,7 +25,7 @@ function installXR(){
  const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'Casas3D.html'),'utf8').replace('return createQuestPanel({...options','return window.testPanel=createQuestPanel({...options').replace('const failedSession=session;', 'console.error(error);const failedSession=session;').replace('// END NAVIGATION MODULES',`// END NAVIGATION MODULES
  window.holdXRCompile=()=>{const original=ee.compileAsync.bind(ee);ee.compileAsync=(...args)=>Promise.all([original(...args),new Promise(r=>setTimeout(r,1200))]);};
  window.pointXR=id=>{const b=window.testPanel.buttons.find(b=>b.id===id);const point=window.testPanel.root.localToWorld(new q(((b.x+b.w/2)/1040-.5)*1.04,(.5-(b.y+b.h/2)/820)*.82,0));Je.parent.worldToLocal(point);const origin=new q(0,1.3,-.3),rotation=new ii().setFromUnitVectors(new q(0,0,-1),point.sub(origin).normalize());window.testRayMatrix=new $t().compose(origin,rotation,new q(1,1,1)).toArray();};
- window.inspectXR=()=>({debug:casaDebug(),lights:Tn.children.filter(o=>o.isLight).map(o=>({type:o.type,visible:o.visible,intensity:o.intensity})),camera:Je.matrixWorld.toArray(),eyes:ee.xr.getCamera().cameras.map(c=>({world:c.matrixWorld.toArray(),projection:c.projectionMatrix.toArray()}))});`);
+ window.inspectXR=()=>({debug:casaDebug(),tourPoints:houseTour.points,spawn:walkPhysics.spawn,foveation:ee.xr.getFoveation(),lights:Tn.children.filter(o=>o.isLight).map(o=>({type:o.type,visible:o.visible,intensity:o.intensity})),camera:Je.matrixWorld.toArray(),eyes:ee.xr.getCamera().cameras.map(c=>({world:c.matrixWorld.toArray(),projection:c.projectionMatrix.toArray()}))});`);
  const server=http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(html.replace('<head>',()=>'<head><script>('+installXR.toString()+')()</script>'));});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const profile=fs.mkdtempSync(path.join(os.tmpdir(),'casas-xr-')),browser=spawn(path.join(process.env.ProgramFiles,'Google/Chrome/Application/chrome.exe'),['--app=about:blank','--user-data-dir='+profile,'--no-first-run','--no-default-browser-check','--window-size=1440,950','--remote-debugging-port=0'],{stdio:'ignore'});let ws;
  try{
@@ -39,14 +39,16 @@ function installXR(){
   for(let i=0;i<600;i++){if(await evaluate('window.CasaLoading?.state.done'))break;await delay(100);}
   assert.equal(await evaluate('window.CasaLoading?.state.done'),true,'application boot completed');
   console.log('Boot',JSON.stringify(await evaluate('window.CasaLoading?.state')),JSON.stringify(errors));
+  const selectedModel=process.argv.find(arg=>arg.startsWith('--model='))?.split('=')[1];
+  if(selectedModel){await evaluate('document.getElementById("model").value='+JSON.stringify(selectedModel)+';document.getElementById("model").dispatchEvent(new Event("change"))');await delay(1000);}
   await delay(600);await evaluate('holdXRCompile();document.getElementById("quest-vr").click()');
   let loadingSeen=false;for(let i=0;i<100;i++){const vr=await evaluate('casaDebug().vr');if(vr.loading===75){assert.equal(vr.panelOpen,false);const shot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-loading.png'),Buffer.from(shot.data,'base64'));loadingSeen=true;break;}await delay(25);}assert.ok(loadingSeen,'loading is actually drawn inside XR');
   for(let i=0;i<120;i++){if(await evaluate('casaDebug().vr.panelOpen'))break;await delay(50);}
   const state=await evaluate('inspectXR()');console.log(JSON.stringify(state),JSON.stringify(errors));
   const shot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-stereo.png'),Buffer.from(shot.data,'base64'));
-  assert.deepEqual(errors,[]);assert.equal(state.debug.vr.active,true);assert.ok(state.debug.vr.frames>10);assert.equal(state.eyes.length,2);
+  assert.deepEqual(errors,[]);assert.equal(state.debug.vr.active,true);assert.ok(state.debug.vr.frames>10);assert.equal(state.eyes.length,2);assert.equal(state.foveation,0,'full panel stays sharp');
   await evaluate('testSession.inputSources=[{targetRaySpace:{},handedness:"right",targetRayMode:"tracked-pointer",profiles:["oculus-touch-v3"],gamepad:{axes:[0,0,0,0],buttons:[]}}];testSession.dispatchEvent(Object.assign(new Event("inputsourceschange"),{added:testSession.inputSources,removed:[]}));pointXR("facade-1")');await delay(100);
-  await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');await delay(200);assert.notEqual(await evaluate('casaDebug().facade'),state.debug.facade);
+  if(!process.argv.includes('--keep-facade')){await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');await delay(200);assert.notEqual(await evaluate('casaDebug().facade'),state.debug.facade);}
   if(process.argv.includes('--experiences')){
     const click=async id=>{await evaluate('pointXR('+JSON.stringify(id)+')');await delay(40);await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');};
     const waitFor=async(expression,attempts=400)=>{for(let i=0;i<attempts;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out: '+expression+' '+JSON.stringify(await evaluate('casaDebug()')));};
@@ -65,7 +67,16 @@ function installXR(){
     const origin=await evaluate('casaDebug().vr.head');await waitFor('Math.hypot(casaDebug().vr.head[0]-('+origin[0]+'),casaDebug().vr.head[2]-('+origin[2]+'))>.15');
     const tourShot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-tour.png'),Buffer.from(tourShot.data,'base64'));
     await click('tour-previous');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),0);
-    await click('tab-tour');await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
+    await click('tab-tour');
+    const aerialIndex=await evaluate('inspectXR().tourPoints.findIndex(p=>p.kind==="aerial")');
+    for(let i=0;i<aerialIndex;i++){await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');}
+    await waitFor('casaDebug().automaticTour.phase==="dwell"');
+    assert.ok((await evaluate('casaDebug().vr.head'))[1]>4,'aerial viewpoint is above the roof');
+    await click('close');await evaluate('window.testPitch=-.7');await delay(300);
+    assert.equal(await evaluate('inspectXR().foveation'),.5,'compact tour controls remain legible');
+    const aerialShot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-aerial.png'),Buffer.from(aerialShot.data,'base64'));
+    await evaluate('window.testPitch=0');await menu();await click('tab-tour');await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
+    assert.ok((await evaluate('casaDebug().vr.head'))[1]<2.2,'canceling aerial tour lands the visitor');
     await click('tour-start');await evaluate('testSession.end()');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
     await evaluate('document.getElementById("quest-vr").click()');await waitFor('casaDebug().vr.active&&casaDebug().vr.panelOpen');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
     console.log('VR experiences',JSON.stringify({before,after:await evaluate('casaDebug()')}));

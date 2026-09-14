@@ -7,7 +7,7 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
   const walkingKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
   let active = false, saved = null, yaw = 0, pitch = 0, changed = false;
   let requestId = 0;
-  let settingsOpen = false;
+  let settingsOpen = false,tourLookIndex=-1,tourLookManual=false;
 
   function captureMouse() {
     const id = ++requestId;
@@ -100,6 +100,7 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
   if (settingsButton) settingsButton.onclick = () => showSettings(!settingsOpen);
   document.addEventListener('mousemove', event => {
     if (!active || settingsOpen || (document.pointerLockElement !== canvas && event.target !== canvas)) return;
+    if(getTour()?.state.active)tourLookManual=true;
     yaw -= (event.movementX || 0) * 0.002;
     pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch - (event.movementY || 0) * 0.002));
     look();
@@ -163,7 +164,20 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
     update(delta) {
       if (!active) return false;
       const tour=getTour();
-      if(tour?.state.active){tour.update(camera.position,delta);const moved=getPhysics()?.update(delta,camera.position);const result=changed||moved||!tour.state.paused;changed=false;return result;}
+      if(tour?.state.active){
+        tour.update(camera.position,delta);
+        if(tourLookIndex!==tour.state.index){tourLookIndex=tour.state.index;tourLookManual=false;}
+        const focus=tour.state.focus;
+        // Desktop aerial views frame the property. The XR rig never uses this:
+        // the headset retains its native orientation throughout the whole tour.
+        if(focus&&!tourLookManual&&!tour.state.paused){
+          const dx=focus.x-camera.position.x,dy=focus.y-camera.position.y,dz=focus.z-camera.position.z;
+          const wantedYaw=Math.atan2(-dx,-dz),wantedPitch=Math.atan2(dy,Math.hypot(dx,dz));
+          const angle=Math.atan2(Math.sin(wantedYaw-yaw),Math.cos(wantedYaw-yaw)),blend=tour.state.fade===1?1:Math.min(1,delta*1.2);
+          yaw+=angle*blend;pitch+=(wantedPitch-pitch)*blend;look();
+        }
+        const moved=getPhysics()?.update(delta,null);const result=changed||moved||!tour.state.paused;changed=false;return result;
+      }
       if (settingsOpen) {
         hint.textContent = 'Edite a casa no painel · Voltar ao passeio para continuar · Esc para sair';
         const result = changed; changed = false; return result;

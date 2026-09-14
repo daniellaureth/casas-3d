@@ -38,20 +38,34 @@ no painel compacto do tour; **Opções** reabre o menu completo.
 O tour movimenta apenas a base do jogador, a 0,85 m/s, com aceleração e parada suaves.
 A cabeça continua livre. Caminhada manual e giro pelo analógico ficam suspensos até
 encerrar o tour; menu e saída do VR continuam disponíveis. As portas necessárias
-abrem automaticamente, respeitando as colisões. Curvas fechadas usam um breve fade.
+abrem automaticamente. O tour flutua sobre os móveis baixos, contorna paredes e
+evita colocar a câmera dentro de armários altos. A caminhada manual mantém sua física.
+Curvas fechadas e mudanças de altitude usam um breve fade.
 No VR, o percurso acompanha uma posição virtual estável, independente dos pequenos
 movimentos da cabeça. Assim, cada parada termina e o próximo ambiente inicia
 automaticamente, sem exigir que o visitante fique imóvel.
 Sair do VR ou trocar a planta encerra o tour. Abrir o menu do sistema Meta suspende
 o avanço enquanto a sessão estiver sem foco.
 
+A visita começa na entrada e percorre todos os ambientes disponíveis. Depois,
+três vistas aéreas mostram fachada, espaço lateral e quintal, acima do telhado.
+O percurso termina de volta ao chão. Encerrar também devolve a uma posição livre
+para caminhar. Se uma passagem impedir o percurso contínuo, a transição para o
+próximo cômodo ocorre com a imagem totalmente escurecida, sem atravessar paredes
+visualmente ou abandonar os cômodos. No VR, olhe ao redor e para baixo nos trechos
+aéreos; no computador, a vista aérea enquadra a casa e o mouse permite olhar livremente.
+O painel mostra a etapa atual e o total de paradas. Os textos do menu VR usam
+texturas de 2048 pixels e menos redução de qualidade enquanto o painel está aberto.
+
 Edite **`tour-config.js`** para ajustar o percurso: `stops` define a ordem dos
 ambientes, `room` busca o nome na planta e `label` define o texto exibido. Ambientes
 ausentes são ignorados. `u` e `v` escolhem a posição proporcional dentro do cômodo
 (0 a 1); `x` e `z` substituem essa posição por coordenadas em metros no mundo.
-O percurso procura posições livres e contorna móveis e paredes. `dwell` define
-os segundos em cada parada (padrão 4), `speed` a velocidade e `start: 'entry'`
-força o início pela entrada; o padrão `nearest` começa no ambiente mais próximo.
+`kind: 'aerial'` cria uma vista aérea: nesse caso, `u` e `v` são proporcionais
+ao terreno real, e a altura enquadra o lote, acima do ponto mais alto da casa/garagem.
+`dwell` define os segundos em cada parada (padrão 4), `speed` a velocidade e
+`start: 'entry'` mantém a sequência completa desde a entrada. O valor opcional
+`nearest` começa no ambiente mais próximo.
 Exemplo de ajuste só para a planta de 50 m²:
 
 ```js

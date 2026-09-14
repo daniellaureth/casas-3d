@@ -8,7 +8,7 @@ const html=read('Casas3D.html');
 const context=vm.createContext({console,AbortController,performance,URL});
 vm.runInContext(html.slice(html.indexOf('// BEGIN QUEST GRAPHICS'),html.indexOf('let walkPhysics=null'))+';globalThis.three={Matrix3:Jt,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,MeshStandardMaterial:Gr,BufferGeometry:je,BufferAttribute:me,Vector3:q,InstancedMesh:vu,SphereGeometry:_o,CylinderGeometry:ti};',context);
 const T=context.three;
-const canvasContext={clearRect(){},fillRect(){},beginPath(){},roundRect(){},fill(){},fillText(){},measureText(s){return {width:s.length*12};}};
+const canvasContext={scale(){},clearRect(){},fillRect(){},beginPath(){},roundRect(){},fill(){},fillText(){},measureText(s){return {width:s.length*12};}};
 context.document={createElement(){return {getContext:()=>canvasContext};}};
 vm.runInContext(read('quest-panel.js')+read('quest-hands.js')+read('quest-lighting.js')+';globalThis.api={createQuestLighting,createQuestPanel,questSafePosition,createQuestHandVisual};',context);
 
@@ -43,6 +43,15 @@ test('every panel control stays within the canvas and hand pinch uses the same r
   }
   const backwardRay=new T.Group();backwardRay.position.set(0,1.65,0);backwardRay.rotation.y=Math.PI;
   assert.equal(f.panel.select(backwardRay),false);f.panel.dispose();
+});
+
+test('VR panel and compact controls retain high resolution without mipmap downsampling',()=>{
+ const f=panelFixture();
+ for(const group of [f.panel.root,f.panel.dock]){
+  const texture=group.children[0].material.map;
+  assert.equal(texture.image.width,2048);assert.equal(texture.generateMipmaps,false);assert.equal(texture.minFilter,1006);
+ }
+ assert.equal(f.panel.root.scale.x,1.08);f.panel.dispose();
 });
 
 test('tour starts from the initial VR panel and remains accessible on every tab without day/night',()=>{

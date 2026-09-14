@@ -11,7 +11,7 @@ function tourAction(action){
 let tourHUDRevision=-1,tourFade=-1;
 function updateTourHUD(){
   if(!houseTour)return;const state=houseTour.state;
-  if(tourHUDRevision!==state.revision){tourHUDRevision=state.revision;et('tour-hud').hidden=!state.active;et('tour-room').textContent=state.label;
+  if(tourHUDRevision!==state.revision){tourHUDRevision=state.revision;et('tour-hud').hidden=!state.active;et('tour-room').textContent=(state.total?(state.index+1)+' / '+state.total+' · ':'')+state.label;
     et('tour-notice').textContent=state.message;et('tour-pause').disabled=state.paused;et('tour-resume').disabled=!state.paused;
     et('auto-tour').setAttribute('aria-pressed',String(state.active));}
   if(tourFade!==state.fade){tourFade=state.fade;et('tour-fade').style.opacity=String(state.fade);}

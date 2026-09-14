@@ -50,7 +50,13 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
         const index=await evaluate('casaDebug().automaticTour.index');await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),index+1);
         await click('tour-previous');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),index);
         const hud=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-tour-'+(quest?'quest':'desktop')+'.png'),Buffer.from(hud.data,'base64'));
+        const aerialIndex=(await evaluate('casaDebug().automaticTour.total'))-4;
+        for(let i=index;i<aerialIndex;i++){await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');}
+        await waitFor('casaDebug().automaticTour.phase==="dwell"');
+        const aerial=await evaluate('casaDebug()');assert.ok(aerial.camera[1]>4);assert.ok(aerial.cameraRotation[0]<-.1,'desktop aerial view frames the house');
+        const aerialShot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-aerial-'+(quest?'quest':'desktop')+'.png'),Buffer.from(aerialShot.data,'base64'));
         await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);assert.equal(await evaluate('casaDebug().walking'),true,'normal first-person controls restored');
+        assert.ok((await evaluate('casaDebug().camera'))[1]<2.2,'aerial cancellation restores ground height');
         await click('auto-tour');await waitFor('casaDebug().automaticTour.phase!=="planning"');
         await evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape"}))');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
         await evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape"}))');assert.equal(await evaluate('casaDebug().walking'),false);

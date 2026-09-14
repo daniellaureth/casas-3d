@@ -16,6 +16,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   let exitHeldSince=null,exitTimer=null,ending=false,frameError=null,frames=0,lastRenderedAt=0;
   const handWalk=typeof createQuestHandWalk==='function'?createQuestHandWalk({Vector3}):null;
   let handPauseUntil=0;
+  let currentFoveation=1;
   let measuredSeconds=0,measuredFrames=0;
   let loading=null,loadPhase=null,compileReady=false,loadStarted=0,readyAt=0;
   renderer.xr.enabled = true;
@@ -137,7 +138,17 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     if(loading)return 'Aguarde o carregamento do VR.';
     camera.getWorldPosition(head);const tour=getTour();
     if(action==='start'||tourOwner!==tour){tourBody.x=head.x;tourBody.y=floorLevel+getPhysics().eyeHeight;tourBody.z=head.z;tourOwner=tour;}
-    try{tour?.action(action,tourBody);if(action==='start')panel?.close();return tour?.state.message||'Tour atualizado.';}catch(error){return error.message;}
+    const beforeX=tourBody.x,beforeY=tourBody.y,beforeZ=tourBody.z;
+    try{
+      tour?.action(action,tourBody);
+      if(action==='stop'){
+        rig.position.x+=tourBody.x-beforeX;rig.position.y+=tourBody.y-beforeY;rig.position.z+=tourBody.z-beforeZ;
+        floorLevel=tourBody.y-getPhysics().eyeHeight;
+        rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);camera.getWorldPosition(head);
+        lastSafeHead={x:head.x,y:head.y,z:head.z};
+      }
+      if(action==='start')panel?.close();return tour?.state.message||'Tour atualizado.';
+    }catch(error){return error.message;}
   }
   function applyConfiguration(key,value) {
     if(key==='tour')return tourCommand(value);
@@ -254,13 +265,15 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
         rig.position.x+=before.x-after.x; rig.position.z+=before.z-after.z;
       }
       lastSafeHead=automatic?{x:head.x+moveX,y:head.y+moveY,z:head.z+moveZ}:{x:body.x,y:body.y,z:body.z};
-      physics.update(delta,automatic?tourBody:lastSafeHead);
+      physics.update(delta,automatic?null:lastSafeHead);
     }
     rig.updateMatrixWorld(true);
     const visibleHands=trackedHands.length>0;
     const hint=curtain.visible?'Próximo de uma parede. Volte um passo ou segure B/Y para sair.':visibleHands?'Para andar: feche o painel e aponte a mão à frente. Pinça: escolher.':'Gatilho: escolher · B/Y: painel · Segure B/Y por 1,5 s: sair';
     panel?.ensureReachable?.(head,direction);
     const hits=panel?.update(rayControllers,hint)||[];
+    const foveation=panel?.visible?0:automatic ? .5 : 1;
+    if(foveation!==currentFoveation){renderer.xr.setFoveation(foveation);currentFoveation=foveation;}
     pointers.forEach((pointer,i)=>{
       const controller=rayControllers[i];rayOrigin.setFromMatrixPosition(controller.matrixWorld);
       rayDirection.set(0,0,-1).transformDirection(controller.matrixWorld);
@@ -328,7 +341,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       exitTimer=globalThis.setInterval?.(monitorSession,100)??null;
       if (airLink) status.textContent='Conectando a imagem da casa aos óculos…';
       await renderer.xr.setSession(session);
-      renderer.xr.setFoveation(1);
+      renderer.xr.setFoveation(1);currentFoveation=1;
       if(!active)return;
       renderer.setAnimationLoop(safeFrame);
       // Optional refresh-rate negotiation must never hold the first rendered frame.
