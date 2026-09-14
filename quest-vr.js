@@ -1,5 +1,5 @@
 // WebXR uses the same house geometry, doors and collision world as the desktop tour.
-function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, makeCurtain, prepare, restore, getPhysics, invalidate, createPanel,createHand,createPointer,getConfiguration,changeConfiguration,airLink = /[?&]connection=airlink(?:&|$)/.test(window.location?.search || '') }) {
+function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, makeCurtain, prepare, prepareScene,lighting,createLoading,restore, getPhysics, invalidate, createPanel,createHand,createPointer,getConfiguration,changeConfiguration,airLink = /[?&]connection=airlink(?:&|$)/.test(window.location?.search || '') }) {
   const button = document.getElementById('quest-vr');
   const status = document.getElementById('quest-status');
   const entryLabel = airLink ? 'Entrar na casa sem fio' : 'Entrar em VR · Quest';
@@ -13,6 +13,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   let exitHeldSince=null,exitTimer=null,ending=false,frameError=null,frames=0,lastRenderedAt=0;
   const handWalk=typeof createQuestHandWalk==='function'?createQuestHandWalk({Vector3}):null;
   let handPauseUntil=0;
+  let loading=null,loadPhase=null,compileReady=false,loadStarted=0,readyAt=0;
   renderer.xr.enabled = true;
   renderer.xr.setReferenceSpaceType('local-floor');
   renderer.xr.setFramebufferScaleFactor(0.8);
@@ -45,6 +46,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     if(exitTimer!==null)globalThis.clearInterval?.(exitTimer);exitTimer=null;exitHeldSince=null;ending=false;
     window.removeEventListener?.('error',onSessionError);
     window.removeEventListener?.('unhandledrejection',onSessionError);
+    loading?.dispose();loading=null;loadPhase=null;lighting?.restore();
     panel?.dispose();panel=null;
     for(const item of handVisuals){item.visual.dispose();rig.remove(item.hand);}handVisuals.length=0;
     for(const pointer of pointers)pointer?.dispose();pointers.length=0;
@@ -56,6 +58,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     if (saved.parent) saved.parent.add(camera);
     camera.position.copy(saved.position); camera.quaternion.copy(saved.quaternion);
     if(saved.scale)camera.scale.copy(saved.scale);
+    if(saved.fov!==undefined)camera.fov=saved.fov;if(saved.zoom!==undefined)camera.zoom=saved.zoom;
+    camera.updateProjectionMatrix?.();
     controls.enabled = saved.enabled;
     renderer.shadowMap.enabled = saved.shadows;
     renderer.shadowMap.needsUpdate = true;
@@ -76,6 +80,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   }
   function interact(event) {
     if(!active)return;
+    if(loading){loading.select(event.target);return;}
     handWalk?.reset();handPauseUntil=(globalThis.performance?.now?.()||0)+600;
     // Recovery and exit must remain usable even when the head touches a wall.
     if(event?.target&&panel?.select(event.target))return;
@@ -110,7 +115,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   function monitorSession() {
     const now=performance.now();if(checkExit(now)||!active)return;
     // The Meta menu and removing the headset intentionally suspend XR frames.
-    if(session.visibilityState&&session.visibilityState!=='visible'){lastRenderedAt=now;return;}
+    if(session.visibilityState&&session.visibilityState!=='visible'){lastRenderedAt=now;if(loading)loadStarted=now;return;}
+    if(loading&&now-loadStarted>30000){recover(new Error('A preparação do passeio demorou demais.'));return;}
     if(now-lastRenderedAt>20000)recover(new Error(frames===0?'A imagem VR não iniciou.':'A imagem VR parou de atualizar.'));
   }
   function putVisitorAt(point) {
@@ -131,7 +137,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       return amplitude===1?'Escala visual normal.':'Sensação de espaço ampliada. As medidas do projeto não mudaram.';
     }
     camera.getWorldPosition(head);const previous={x:head.x,z:head.z};
-    const message=changeConfiguration(key,value);
+    lighting?.restore();let message;
+    try{message=changeConfiguration(key,value);}finally{lighting?.apply();}
     const safe=questSafePosition(getPhysics(),previous);
     if(safe){putVisitorAt(safe);if(Math.hypot(safe.x-previous.x,safe.z-previous.z)>.02)return 'Escolha aplicada. Sua posição foi ajustada para um espaço livre.';}
     return message;
@@ -172,6 +179,19 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     // Physical room movement cannot be stopped by software. Hide the scene while
     // the tracked head crosses a wall; only returning to the clear side restores it.
     if (!lastSafeHead) lastSafeHead = {x:head.x,y:floor+physics.eyeHeight,z:head.z};
+    if(loading){
+      rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);loading.update(camera);
+      if(loadPhase==='first')loadPhase='prepare';
+      else if(loadPhase==='prepare'){prepareScene?.();lighting?.apply();loading.set(55,'Preparando a casa e a iluminação…');loadPhase='compile';}
+      else if(loadPhase==='compile'){
+        loading.set(75,'Preparando a imagem dos dois olhos…');loadPhase='compiling';const currentSession=session;
+        Promise.resolve(renderer.compileAsync?.(scene,camera)).then(()=>{if(active&&session===currentSession)compileReady=true;},error=>{if(active&&session===currentSession)recover(error);});
+      }else if(loadPhase==='compiling'&&compileReady){loading.set(90,'Conferindo a primeira imagem…');loadPhase='warm';}
+      else if(loadPhase==='warm'){renderer.render(scene,camera);loading.set(100,'Tudo pronto. Boa visita!');readyAt=time;loadPhase='ready';}
+      renderer.render(loading.scene,camera);frames++;lastRenderedAt=performance.now();
+      if(loadPhase==='ready'&&time-readyAt>=400){loading.dispose();loading=null;loadPhase=null;openPanelNextFrame=!!panel;lastTime=null;}
+      return;
+    }
     curtain.visible = physics.headPathBlocked?.(lastSafeHead,head) ?? false;
     if(openPanelNextFrame){openPanelNextFrame=false;panel?.open(head,direction);}
     let forward = 0, right = 0, turn = 0;
@@ -216,6 +236,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     rig.updateMatrixWorld(true);
     const visibleHands=trackedHands.length>0;
     const hint=curtain.visible?'Próximo de uma parede. Volte um passo ou segure B/Y para sair.':visibleHands?'Para andar: feche o painel e aponte a mão à frente. Pinça: escolher.':'Gatilho: escolher · B/Y: painel · Segure B/Y por 1,5 s: sair';
+    panel?.ensureReachable?.(head,direction);
     const hits=panel?.update(rayControllers,hint)||[];
     pointers.forEach((pointer,i)=>{
       const controller=rayControllers[i];rayOrigin.setFromMatrixPosition(controller.matrixWorld);
@@ -255,7 +276,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       session=await navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor'],optionalFeatures:['bounded-floor','hand-tracking','layers']});
       if (airLink) status.textContent='Preparando a casa para os óculos…';
       prepare();
-      saved={parent:camera.parent,position:camera.position.clone(),quaternion:camera.quaternion.clone(),scale:camera.scale?.clone(),enabled:controls.enabled,shadows:renderer.shadowMap.enabled};
+      saved={parent:camera.parent,position:camera.position.clone(),quaternion:camera.quaternion.clone(),scale:camera.scale?.clone(),fov:camera.fov,zoom:camera.zoom,enabled:controls.enabled,shadows:renderer.shadowMap.enabled};
       controls.enabled=false;
       rig=new Group(); scene.add(rig); rig.add(camera);
       const p=getPhysics(), spawn=p.spawn;
@@ -271,7 +292,9 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
         if(createHand&&renderer.xr.getHand){const hand=renderer.xr.getHand(i);rig.add(hand);handVisuals.push({hand,visual:createHand(hand)});}
       }
       panel=createPanel?.({scene,camera,getState:()=>({...getConfiguration(),amplitude}),change:applyConfiguration,navigate,door:doorInteraction,exitVR});
-      openPanelNextFrame=!!panel;
+      loading=createLoading?.({exitVR})||null;loadPhase=loading?'first':null;compileReady=false;loadStarted=performance.now();
+      if(!loading){prepareScene?.();lighting?.apply();}
+      openPanelNextFrame=!loading&&!!panel;
       session.addEventListener('end',finish,{once:true});
       lastTime=null; lastSafeHead=null; active=true;
       lastRenderedAt=performance.now();
@@ -316,5 +339,5 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     window.addEventListener?.('focus',checkConnection);
     checkConnection();
   }
-  return {get active(){return active;},get diagnostics(){return {active,amplitude,frames,frameError,handWalking:!!handWalk?.active,wallProtection:!!curtain?.visible,head:[head.x,head.y,head.z],panelOpen:!!panel?.visible,handFeature:session?.enabledFeatures?.includes('hand-tracking')??null,handInputs:Array.from(session?.inputSources||[]).filter(input=>input.hand).length};},enter,checkConnection,end:exitVR};
+  return {get active(){return active;},get diagnostics(){return {active,amplitude,frames,frameError,loading:loading?.percent??null,loadPhase,lightingMeshes:lighting?.count??0,visibility:session?.visibilityState??null,handWalking:!!handWalk?.active,wallProtection:!!curtain?.visible,head:[head.x,head.y,head.z],panelOpen:!!panel?.visible,handFeature:session?.enabledFeatures?.includes('hand-tracking')??null,handInputs:Array.from(session?.inputSources||[]).filter(input=>input.hand).length};},enter,checkConnection,end:exitVR};
 }

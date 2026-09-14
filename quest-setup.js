@@ -30,6 +30,8 @@ function questChangeConfiguration(key,value) {
     (key==='garage'||key==='garageSpaces'?et('garage-status').textContent:'')||'Escolha aplicada.';
 }
 questMode=createQuestVR({renderer:ee,scene:Tn,camera:Je,controls:xe,Group:Ce,Vector3:q,
+  lighting:questProfile.lightweight?createQuestLighting({scene:Tn,MeshBasicMaterial:zo,BufferAttribute:me,Vector3:q,Matrix3:Jt,getEvening:()=>vs}):null,
+  createLoading(options){return createQuestLoading({...options,Scene:Jo,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,Vector3:q});},
   getConfiguration:questConfiguration,changeConfiguration:questChangeConfiguration,
   createPanel(options){return createQuestPanel({...options,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,Vector3:q});},
   createHand(hand){return createQuestHandVisual({hand,Group:Ce,Mesh:Zt,InstancedMesh:vu,BufferGeometry:je,BufferAttribute:me,SphereGeometry:_o,MeshStandardMaterial:Gr,Vector3:q});},
@@ -42,9 +44,12 @@ questMode=createQuestVR({renderer:ee,scene:Tn,camera:Je,controls:xe,Group:Ce,Vec
   },
   makeCurtain(){const mesh=new Zt(new Ns(4,4),new zo({color:0,depthTest:false,depthWrite:false}));mesh.position.z=-0.2;mesh.renderOrder=9999;mesh.frustumCulled=false;return mesh;},
   prepare(){
-    walkMode.stop();ke();ji(100);hn=100;Vn=false;Xe=0;Un=Number(Zn);De=null;Bn=null;dc(100);
-    et('xray').setAttribute('aria-pressed','false');
+    walkMode.stop();ke();
     if(Br){cancelAnimationFrame(Br);Br=0;}
+  },
+  prepareScene(){
+    ji(100);hn=100;Vn=false;Xe=0;Un=Number(Zn);De=null;Bn=null;dc(100);
+    et('xray').setAttribute('aria-pressed','false');
     questBatchHouse();
   },
   restore(){lc();Io=performance.now();},getPhysics:()=>walkPhysics,invalidate:Gn});

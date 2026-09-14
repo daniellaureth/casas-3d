@@ -15,6 +15,7 @@ function createQuestHandVisual({hand,Group,Mesh,InstancedMesh,BufferGeometry,Buf
   const geometry=new BufferGeometry();geometry.setAttribute('position',new BufferAttribute(vertices,3));geometry.setIndex(indices);
   const positions=geometry.attributes.position.array;
   const surface=new Mesh(geometry,skin);surface.frustumCulled=palm.frustumCulled=nails.frustumCulled=false;hand.add(surface,palm,nails);
+  for(const mesh of [surface,palm,nails])mesh.userData.questDynamic=true;
   const dummy=new Group(),side=new Vector3(),normal=new Vector3(),long=new Vector3(),center=new Vector3(),tangent=new Vector3(),radial=new Vector3();
   const frame=new Group(),ringNormal=new Vector3(),points=Array.from({length:4},()=>new Vector3()),radii=new Array(4);
   let handedness=hand.userData?.handedness||'right';

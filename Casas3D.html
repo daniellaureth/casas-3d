@@ -5521,6 +5521,11 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
   }
   function open(head,forward) {root.visible=true;dock.visible=false;place(head,forward);draw();}
   function close() {root.visible=false;dock.visible=true;}
+  function ensureReachable(head,forward){
+    if(!root.visible)return;
+    const distance=root.position.distanceTo(head);
+    if(distance>1.7||distance<.6||Math.abs(root.position.y-head.y)>.7)place(head,forward);
+  }
   function planeHit(object,origin,direction,w,h) {
     object.updateWorldMatrix(true,false);a.copy(origin);b.copy(origin).add(direction);object.worldToLocal(a);object.worldToLocal(b);b.sub(a);
     if(a.z<0||b.z>=-.00001)return null;
@@ -5543,7 +5548,7 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
     if(next!==hover||inputHint!==hint){hover=next;inputHint=hint;if(root.visible)draw();}
     return hits;
   }
-  return {root,dock,open,place,select,hit,update,draw,get visible(){return root.visible;},get buttons(){return buttons;},
+  return {root,dock,open,place,ensureReachable,select,hit,update,draw,get visible(){return root.visible;},get buttons(){return buttons;},
     close,dispose(){disposed=true;scene.remove(root);camera.remove(dock);board.geometry.dispose();chipMesh.geometry.dispose();material.dispose();chipMaterial.dispose();texture.dispose();chipTexture.dispose();}};
 }
 
@@ -5574,6 +5579,7 @@ function createQuestHandVisual({hand,Group,Mesh,InstancedMesh,BufferGeometry,Buf
   const geometry=new BufferGeometry();geometry.setAttribute('position',new BufferAttribute(vertices,3));geometry.setIndex(indices);
   const positions=geometry.attributes.position.array;
   const surface=new Mesh(geometry,skin);surface.frustumCulled=palm.frustumCulled=nails.frustumCulled=false;hand.add(surface,palm,nails);
+  for(const mesh of [surface,palm,nails])mesh.userData.questDynamic=true;
   const dummy=new Group(),side=new Vector3(),normal=new Vector3(),long=new Vector3(),center=new Vector3(),tangent=new Vector3(),radial=new Vector3();
   const frame=new Group(),ringNormal=new Vector3(),points=Array.from({length:4},()=>new Vector3()),radii=new Array(4);
   let handedness=hand.userData?.handedness||'right';
@@ -5651,8 +5657,79 @@ function createQuestHandWalk({Vector3,speed=1}) {
   return {update,reset,get active(){return active;}};
 }
 
+// Standalone VR uses baked diffuse vertex lighting. It needs no PBR environment
+// sampling or dynamic light shader variants. Original geometry/materials are restored.
+function createQuestLighting({scene,MeshBasicMaterial,BufferAttribute,Vector3,Matrix3,getEvening=()=>false}) {
+  const entries=[],materials=new Map(),geometries=new Set();
+  const normal=new Vector3(),sun=new Vector3(-.65,.68,.7).normalize(),fill=new Vector3(12,15,-8).normalize(),normalMatrix=new Matrix3();
+  function restore(){
+    for(const {mesh,geometry,material} of entries){mesh.geometry=geometry;mesh.material=material;}
+    entries.length=0;for(const geometry of geometries)geometry.dispose();geometries.clear();
+    for(const material of materials.values())material.dispose();materials.clear();
+  }
+  function apply(){
+    restore();scene.updateMatrixWorld(true);const evening=getEvening(),channels=['r','g','b'];sun.set(-.65,evening?.25:.68,.7).normalize();
+    scene.traverseVisible(mesh=>{
+      if(!mesh.isMesh||Array.isArray(mesh.material)||!mesh.material.isMeshStandardMaterial||mesh.userData.questDynamic)return;
+      const original=mesh.material,geometry=mesh.geometry,source=geometry.attributes.normal;
+      if(!source)return;
+      let material=materials.get(original);
+      if(!material){
+        material=new MeshBasicMaterial({color:0xffffff,map:original.map,alphaMap:original.alphaMap,
+          transparent:original.transparent,opacity:original.opacity,alphaTest:original.alphaTest,
+          side:original.side,depthTest:original.depthTest,depthWrite:original.depthWrite,
+          vertexColors:true,toneMapped:original.toneMapped,fog:original.fog});
+        material.name='Quest VR · '+original.name;materials.set(original,material);
+      }
+      const baked=geometry.clone(),colors=new Float32Array(source.count*3),oldColors=geometry.attributes.color;
+      normalMatrix.getNormalMatrix(mesh.matrixWorld);
+      for(let i=0;i<source.count;i++){
+        normal.fromBufferAttribute(source,i).applyMatrix3(normalMatrix).normalize();
+        // A diffuse minimum keeps interiors readable; directional light retains volume.
+        const daylight=.36+.20*(normal.y*.5+.5)+.54*Math.max(0,normal.dot(sun))+.10*Math.max(0,normal.dot(fill));
+        for(let axis=0;axis<3;axis++){
+          const channel=channels[axis],vertex=original.vertexColors&&oldColors?oldColors.getComponent(i,axis):1,tint=evening?[1,.86,.70][axis]:1;
+          colors[i*3+axis]=original.color[channel]*vertex*daylight*tint+(original.emissive?.[channel]||0)*(original.emissiveIntensity??1);
+        }
+      }
+      baked.setAttribute('color',new BufferAttribute(colors,3));
+      entries.push({mesh,geometry,material:original});geometries.add(baked);mesh.geometry=baked;mesh.material=material;
+    });
+  }
+  return {apply,restore,get count(){return entries.length;}};
+}
+
+// This is rendered in both XR eyes, independently of the house and its lighting.
+function createQuestLoading({Scene,Group,Mesh,PlaneGeometry,CanvasTexture,MeshBasicMaterial,Vector3,exitVR}) {
+  const scene=new Scene(),root=new Group();scene.add(root);
+  const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=640;
+  const ctx=canvas.getContext('2d'),texture=new CanvasTexture(canvas);texture.colorSpace='srgb';texture.generateMipmaps=false;
+  const backdrop=new Mesh(new PlaneGeometry(200,200),new MeshBasicMaterial({color:0xf7f6ef,depthTest:false,depthWrite:false,toneMapped:false}));backdrop.position.z=-2;root.add(backdrop);
+  const board=new Mesh(new PlaneGeometry(1.12,.70),new MeshBasicMaterial({map:texture,depthTest:false,depthWrite:false,toneMapped:false}));board.position.z=-1.15;board.renderOrder=1;root.add(board);
+  const origin=new Vector3(),end=new Vector3();let percent=0;
+  function set(value,label){
+    percent=value;ctx.fillStyle='#f7f6ef';ctx.fillRect(0,0,1024,640);ctx.textAlign='center';
+    ctx.fillStyle='#315c44';ctx.font='24px Arial';ctx.fillText('CASAS 3D',512,100);
+    ctx.font='48px Arial';ctx.fillText('Preparando seu passeio VR',512,200);
+    ctx.font='30px Arial';ctx.fillText(label,512,274);
+    ctx.fillStyle='#dce5d9';ctx.fillRect(112,335,800,16);ctx.fillStyle='#41684e';ctx.fillRect(112,335,800*percent/100,16);
+    ctx.font='42px Arial';ctx.fillText(Math.round(percent)+'%',512,418);
+    ctx.fillStyle='#e2e9df';ctx.fillRect(312,495,400,80);ctx.fillStyle='#294436';ctx.font='30px Arial';ctx.fillText('Sair do VR',512,547);texture.needsUpdate=true;
+  }
+  function update(camera){camera.getWorldPosition(root.position);camera.getWorldQuaternion(root.quaternion);root.updateMatrixWorld(true);}
+  function select(controller){
+    if(controller.visible===false)return false;controller.updateWorldMatrix(true,false);
+    controller.getWorldPosition(origin);end.set(0,0,-1).transformDirection(controller.matrixWorld).add(origin);
+    root.worldToLocal(origin);root.worldToLocal(end);end.sub(origin);if(end.z>=-.00001)return false;
+    const t=(-1.15-origin.z)/end.z,x=(origin.x+t*end.x)/1.12+.5,y=.5-(origin.y+t*end.y)/.70;
+    if(t>=0&&x>=312/1024&&x<=712/1024&&y>=495/640&&y<=575/640){void exitVR();return true;}return false;
+  }
+  set(10,'Conectando aos óculos…');
+  return {scene,set,update,select,get percent(){return percent;},dispose(){for(const mesh of [board,backdrop]){mesh.geometry.dispose();mesh.material.dispose();}texture.dispose();}};
+}
+
 // WebXR uses the same house geometry, doors and collision world as the desktop tour.
-function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, makeCurtain, prepare, restore, getPhysics, invalidate, createPanel,createHand,createPointer,getConfiguration,changeConfiguration,airLink = /[?&]connection=airlink(?:&|$)/.test(window.location?.search || '') }) {
+function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, makeCurtain, prepare, prepareScene,lighting,createLoading,restore, getPhysics, invalidate, createPanel,createHand,createPointer,getConfiguration,changeConfiguration,airLink = /[?&]connection=airlink(?:&|$)/.test(window.location?.search || '') }) {
   const button = document.getElementById('quest-vr');
   const status = document.getElementById('quest-status');
   const entryLabel = airLink ? 'Entrar na casa sem fio' : 'Entrar em VR · Quest';
@@ -5666,6 +5743,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   let exitHeldSince=null,exitTimer=null,ending=false,frameError=null,frames=0,lastRenderedAt=0;
   const handWalk=typeof createQuestHandWalk==='function'?createQuestHandWalk({Vector3}):null;
   let handPauseUntil=0;
+  let loading=null,loadPhase=null,compileReady=false,loadStarted=0,readyAt=0;
   renderer.xr.enabled = true;
   renderer.xr.setReferenceSpaceType('local-floor');
   renderer.xr.setFramebufferScaleFactor(0.8);
@@ -5698,6 +5776,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     if(exitTimer!==null)globalThis.clearInterval?.(exitTimer);exitTimer=null;exitHeldSince=null;ending=false;
     window.removeEventListener?.('error',onSessionError);
     window.removeEventListener?.('unhandledrejection',onSessionError);
+    loading?.dispose();loading=null;loadPhase=null;lighting?.restore();
     panel?.dispose();panel=null;
     for(const item of handVisuals){item.visual.dispose();rig.remove(item.hand);}handVisuals.length=0;
     for(const pointer of pointers)pointer?.dispose();pointers.length=0;
@@ -5709,6 +5788,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     if (saved.parent) saved.parent.add(camera);
     camera.position.copy(saved.position); camera.quaternion.copy(saved.quaternion);
     if(saved.scale)camera.scale.copy(saved.scale);
+    if(saved.fov!==undefined)camera.fov=saved.fov;if(saved.zoom!==undefined)camera.zoom=saved.zoom;
+    camera.updateProjectionMatrix?.();
     controls.enabled = saved.enabled;
     renderer.shadowMap.enabled = saved.shadows;
     renderer.shadowMap.needsUpdate = true;
@@ -5729,6 +5810,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   }
   function interact(event) {
     if(!active)return;
+    if(loading){loading.select(event.target);return;}
     handWalk?.reset();handPauseUntil=(globalThis.performance?.now?.()||0)+600;
     // Recovery and exit must remain usable even when the head touches a wall.
     if(event?.target&&panel?.select(event.target))return;
@@ -5763,7 +5845,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   function monitorSession() {
     const now=performance.now();if(checkExit(now)||!active)return;
     // The Meta menu and removing the headset intentionally suspend XR frames.
-    if(session.visibilityState&&session.visibilityState!=='visible'){lastRenderedAt=now;return;}
+    if(session.visibilityState&&session.visibilityState!=='visible'){lastRenderedAt=now;if(loading)loadStarted=now;return;}
+    if(loading&&now-loadStarted>30000){recover(new Error('A preparação do passeio demorou demais.'));return;}
     if(now-lastRenderedAt>20000)recover(new Error(frames===0?'A imagem VR não iniciou.':'A imagem VR parou de atualizar.'));
   }
   function putVisitorAt(point) {
@@ -5784,7 +5867,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       return amplitude===1?'Escala visual normal.':'Sensação de espaço ampliada. As medidas do projeto não mudaram.';
     }
     camera.getWorldPosition(head);const previous={x:head.x,z:head.z};
-    const message=changeConfiguration(key,value);
+    lighting?.restore();let message;
+    try{message=changeConfiguration(key,value);}finally{lighting?.apply();}
     const safe=questSafePosition(getPhysics(),previous);
     if(safe){putVisitorAt(safe);if(Math.hypot(safe.x-previous.x,safe.z-previous.z)>.02)return 'Escolha aplicada. Sua posição foi ajustada para um espaço livre.';}
     return message;
@@ -5825,6 +5909,19 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     // Physical room movement cannot be stopped by software. Hide the scene while
     // the tracked head crosses a wall; only returning to the clear side restores it.
     if (!lastSafeHead) lastSafeHead = {x:head.x,y:floor+physics.eyeHeight,z:head.z};
+    if(loading){
+      rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);loading.update(camera);
+      if(loadPhase==='first')loadPhase='prepare';
+      else if(loadPhase==='prepare'){prepareScene?.();lighting?.apply();loading.set(55,'Preparando a casa e a iluminação…');loadPhase='compile';}
+      else if(loadPhase==='compile'){
+        loading.set(75,'Preparando a imagem dos dois olhos…');loadPhase='compiling';const currentSession=session;
+        Promise.resolve(renderer.compileAsync?.(scene,camera)).then(()=>{if(active&&session===currentSession)compileReady=true;},error=>{if(active&&session===currentSession)recover(error);});
+      }else if(loadPhase==='compiling'&&compileReady){loading.set(90,'Conferindo a primeira imagem…');loadPhase='warm';}
+      else if(loadPhase==='warm'){renderer.render(scene,camera);loading.set(100,'Tudo pronto. Boa visita!');readyAt=time;loadPhase='ready';}
+      renderer.render(loading.scene,camera);frames++;lastRenderedAt=performance.now();
+      if(loadPhase==='ready'&&time-readyAt>=400){loading.dispose();loading=null;loadPhase=null;openPanelNextFrame=!!panel;lastTime=null;}
+      return;
+    }
     curtain.visible = physics.headPathBlocked?.(lastSafeHead,head) ?? false;
     if(openPanelNextFrame){openPanelNextFrame=false;panel?.open(head,direction);}
     let forward = 0, right = 0, turn = 0;
@@ -5869,6 +5966,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     rig.updateMatrixWorld(true);
     const visibleHands=trackedHands.length>0;
     const hint=curtain.visible?'Próximo de uma parede. Volte um passo ou segure B/Y para sair.':visibleHands?'Para andar: feche o painel e aponte a mão à frente. Pinça: escolher.':'Gatilho: escolher · B/Y: painel · Segure B/Y por 1,5 s: sair';
+    panel?.ensureReachable?.(head,direction);
     const hits=panel?.update(rayControllers,hint)||[];
     pointers.forEach((pointer,i)=>{
       const controller=rayControllers[i];rayOrigin.setFromMatrixPosition(controller.matrixWorld);
@@ -5908,7 +6006,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       session=await navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor'],optionalFeatures:['bounded-floor','hand-tracking','layers']});
       if (airLink) status.textContent='Preparando a casa para os óculos…';
       prepare();
-      saved={parent:camera.parent,position:camera.position.clone(),quaternion:camera.quaternion.clone(),scale:camera.scale?.clone(),enabled:controls.enabled,shadows:renderer.shadowMap.enabled};
+      saved={parent:camera.parent,position:camera.position.clone(),quaternion:camera.quaternion.clone(),scale:camera.scale?.clone(),fov:camera.fov,zoom:camera.zoom,enabled:controls.enabled,shadows:renderer.shadowMap.enabled};
       controls.enabled=false;
       rig=new Group(); scene.add(rig); rig.add(camera);
       const p=getPhysics(), spawn=p.spawn;
@@ -5924,7 +6022,9 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
         if(createHand&&renderer.xr.getHand){const hand=renderer.xr.getHand(i);rig.add(hand);handVisuals.push({hand,visual:createHand(hand)});}
       }
       panel=createPanel?.({scene,camera,getState:()=>({...getConfiguration(),amplitude}),change:applyConfiguration,navigate,door:doorInteraction,exitVR});
-      openPanelNextFrame=!!panel;
+      loading=createLoading?.({exitVR})||null;loadPhase=loading?'first':null;compileReady=false;loadStarted=performance.now();
+      if(!loading){prepareScene?.();lighting?.apply();}
+      openPanelNextFrame=!loading&&!!panel;
       session.addEventListener('end',finish,{once:true});
       lastTime=null; lastSafeHead=null; active=true;
       lastRenderedAt=performance.now();
@@ -5969,7 +6069,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     window.addEventListener?.('focus',checkConnection);
     checkConnection();
   }
-  return {get active(){return active;},get diagnostics(){return {active,amplitude,frames,frameError,handWalking:!!handWalk?.active,wallProtection:!!curtain?.visible,head:[head.x,head.y,head.z],panelOpen:!!panel?.visible,handFeature:session?.enabledFeatures?.includes('hand-tracking')??null,handInputs:Array.from(session?.inputSources||[]).filter(input=>input.hand).length};},enter,checkConnection,end:exitVR};
+  return {get active(){return active;},get diagnostics(){return {active,amplitude,frames,frameError,loading:loading?.percent??null,loadPhase,lightingMeshes:lighting?.count??0,visibility:session?.visibilityState??null,handWalking:!!handWalk?.active,wallProtection:!!curtain?.visible,head:[head.x,head.y,head.z],panelOpen:!!panel?.visible,handFeature:session?.enabledFeatures?.includes('hand-tracking')??null,handInputs:Array.from(session?.inputSources||[]).filter(input=>input.hand).length};},enter,checkConnection,end:exitVR};
 }
 
 walkMode=createWalkCamera({camera:Je,controls:xe,canvas:ee.domElement,stopTour:ke,finishHouse(){ji(100);hn=100;Vn=false;Xe=0;et("xray").setAttribute("aria-pressed","false");De=null;Bn=null;dc(100);},resize:lc,invalidate:Gn,getPlan:()=>ue.userData.plan,getPhysics:()=>walkPhysics});
@@ -6005,6 +6105,8 @@ function questChangeConfiguration(key,value) {
     (key==='garage'||key==='garageSpaces'?et('garage-status').textContent:'')||'Escolha aplicada.';
 }
 questMode=createQuestVR({renderer:ee,scene:Tn,camera:Je,controls:xe,Group:Ce,Vector3:q,
+  lighting:questProfile.lightweight?createQuestLighting({scene:Tn,MeshBasicMaterial:zo,BufferAttribute:me,Vector3:q,Matrix3:Jt,getEvening:()=>vs}):null,
+  createLoading(options){return createQuestLoading({...options,Scene:Jo,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,Vector3:q});},
   getConfiguration:questConfiguration,changeConfiguration:questChangeConfiguration,
   createPanel(options){return createQuestPanel({...options,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,Vector3:q});},
   createHand(hand){return createQuestHandVisual({hand,Group:Ce,Mesh:Zt,InstancedMesh:vu,BufferGeometry:je,BufferAttribute:me,SphereGeometry:_o,MeshStandardMaterial:Gr,Vector3:q});},
@@ -6017,9 +6119,12 @@ questMode=createQuestVR({renderer:ee,scene:Tn,camera:Je,controls:xe,Group:Ce,Vec
   },
   makeCurtain(){const mesh=new Zt(new Ns(4,4),new zo({color:0,depthTest:false,depthWrite:false}));mesh.position.z=-0.2;mesh.renderOrder=9999;mesh.frustumCulled=false;return mesh;},
   prepare(){
-    walkMode.stop();ke();ji(100);hn=100;Vn=false;Xe=0;Un=Number(Zn);De=null;Bn=null;dc(100);
-    et('xray').setAttribute('aria-pressed','false');
+    walkMode.stop();ke();
     if(Br){cancelAnimationFrame(Br);Br=0;}
+  },
+  prepareScene(){
+    ji(100);hn=100;Vn=false;Xe=0;Un=Number(Zn);De=null;Bn=null;dc(100);
+    et('xray').setAttribute('aria-pressed','false');
     questBatchHouse();
   },
   restore(){lc();Io=performance.now();},getPhysics:()=>walkPhysics,invalidate:Gn});

@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),VM=require('node:vm');
 const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'Casas3D.html'),'utf8');
-function fixture(model='50',panelFactory) {
+function fixture(model='50',panelFactory,extra={}) {
   const elements={'quest-vr':{},'quest-status':{}};
   const errors=[];let clock=0,monitor=null;
   class Layer {constructor(){this.framebuffer={};this.framebufferWidth=2000;this.framebufferHeight=1000;}getViewport(view){return {x:view.eye==='left'?0:1000,y:0,width:1000,height:1000};}}
@@ -15,7 +15,7 @@ function fixture(model='50',panelFactory) {
   renderer.xr=new T.XRManager(renderer,{getContextAttributes:()=>({xrCompatible:true,depth:true,stencil:false,antialias:true})});
   renderer.setAnimationLoop=fn=>renderer.xr.setAnimationLoop(fn);
   renderer.render=()=>{scene.updateMatrixWorld();renderer.xr.updateCamera(camera);};
-  const mode=T.createQuestVR({...T,renderer,scene,camera,controls,airLink:false,makeCurtain:()=>{curtain=new T.Group();return curtain;},prepare(){},restore(){},invalidate(){},getPhysics:()=>physics,createPanel:panelFactory});
+  const mode=T.createQuestVR({...T,renderer,scene,camera,controls,airLink:false,makeCurtain:()=>{curtain=new T.Group();return curtain;},prepare(){},restore(){},invalidate(){},getPhysics:()=>physics,createPanel:panelFactory,...extra});
   function tick(time,{x=0,y=1.7,z=0,yaw=0,tracked=true}={}) {
     clock=time;
     const projection=new T.PerspectiveCamera(90,1,.1,500).projectionMatrix.toArray();
@@ -30,7 +30,7 @@ test('real Three XR manager keeps a stationary tracked head outside walls',async
   for(const model of ['50','60','62','69']) {
     const f=fixture(model);await f.mode.enter();
     for(let i=0;i<10;i++) {const state=f.tick(i*14,{x:2,z:3});assert.equal(state.curtain,false,model+' '+JSON.stringify(state));}
-    await f.mode.end();
+    await f.mode.end();assert.equal(f.camera.fov,38);assert.equal(f.camera.zoom,1);
   }
 });
 test('the exit panel remains selectable while wall protection covers the house',async()=>{
@@ -68,4 +68,20 @@ test('stopped frames recover to the browser and the Meta menu can pause safely',
 test('a session that never delivers its first frame returns to the browser',async()=>{
   const f=fixture();await f.mode.enter();f.advanceClock(21000);await Promise.resolve();
   assert.equal(f.mode.active,false);assert.match(f.mode.diagnostics.frameError,/não iniciou/);
+});
+test('VR loading stays in both eyes while compilation waits and reaches 100 only after the house renders',async()=>{
+  const loadingScene={},progress=[],draws=[];let finishCompile,prepared=0,disposed=0,opened=0;
+  const f=fixture('50',()=>({visible:false,open(){opened++;},update:()=>[],dispose(){}}),{
+    prepareScene(){prepared++;},createLoading:()=>({scene:loadingScene,percent:10,set(value){progress.push(value);this.percent=value;},update(){},dispose(){disposed++;}})});
+  f.renderer.compileAsync=()=>new Promise(r=>finishCompile=r);
+  const render=f.renderer.render;f.renderer.render=(scene,camera)=>{draws.push(scene===loadingScene?'loading':'house');render(scene,camera);};
+  await f.mode.enter();assert.equal(prepared,0);f.tick(0);assert.deepEqual(draws,['loading']);
+  f.tick(16);assert.equal(prepared,1);f.tick(32);f.tick(48);assert.equal(opened,0);assert.ok(!progress.includes(100));assert.ok(!draws.includes('house'));
+  finishCompile();await new Promise(setImmediate);f.tick(64);f.tick(80);assert.equal(progress.at(-1),100);assert.ok(draws.includes('house'));assert.equal(opened,0);
+  f.tick(500);f.tick(516);assert.equal(disposed,1);assert.equal(opened,1);await f.mode.end();
+});
+test('VR loading can be canceled while shaders are still preparing',async()=>{
+  let options,disposed=0;const f=fixture('50',undefined,{createLoading:o=>{options=o;return {scene:{},percent:10,set(){},update(){},select(){void options.exitVR();},dispose(){disposed++;}};}});
+  f.renderer.compileAsync=()=>new Promise(()=>{});await f.mode.enter();f.tick(0);f.tick(16);f.tick(32);
+  f.renderer.xr.getController(0).dispatchEvent({type:'select'});await Promise.resolve();assert.equal(f.mode.active,false);assert.equal(disposed,1);
 });

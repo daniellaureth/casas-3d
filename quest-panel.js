@@ -87,6 +87,11 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
   }
   function open(head,forward) {root.visible=true;dock.visible=false;place(head,forward);draw();}
   function close() {root.visible=false;dock.visible=true;}
+  function ensureReachable(head,forward){
+    if(!root.visible)return;
+    const distance=root.position.distanceTo(head);
+    if(distance>1.7||distance<.6||Math.abs(root.position.y-head.y)>.7)place(head,forward);
+  }
   function planeHit(object,origin,direction,w,h) {
     object.updateWorldMatrix(true,false);a.copy(origin);b.copy(origin).add(direction);object.worldToLocal(a);object.worldToLocal(b);b.sub(a);
     if(a.z<0||b.z>=-.00001)return null;
@@ -109,7 +114,7 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
     if(next!==hover||inputHint!==hint){hover=next;inputHint=hint;if(root.visible)draw();}
     return hits;
   }
-  return {root,dock,open,place,select,hit,update,draw,get visible(){return root.visible;},get buttons(){return buttons;},
+  return {root,dock,open,place,ensureReachable,select,hit,update,draw,get visible(){return root.visible;},get buttons(){return buttons;},
     close,dispose(){disposed=true;scene.remove(root);camera.remove(dock);board.geometry.dispose();chipMesh.geometry.dispose();material.dispose();chipMaterial.dispose();texture.dispose();chipTexture.dispose();}};
 }
 

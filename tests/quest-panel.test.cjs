@@ -6,11 +6,11 @@ const path=require('node:path');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 const html=read('Casas3D.html');
 const context=vm.createContext({console,AbortController,performance,URL});
-vm.runInContext(html.slice(html.indexOf('// BEGIN QUEST GRAPHICS'),html.indexOf('let walkPhysics=null'))+';globalThis.three={Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,MeshStandardMaterial:Gr,BufferGeometry:je,BufferAttribute:me,Vector3:q,InstancedMesh:vu,SphereGeometry:_o,CylinderGeometry:ti};',context);
+vm.runInContext(html.slice(html.indexOf('// BEGIN QUEST GRAPHICS'),html.indexOf('let walkPhysics=null'))+';globalThis.three={Matrix3:Jt,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,MeshStandardMaterial:Gr,BufferGeometry:je,BufferAttribute:me,Vector3:q,InstancedMesh:vu,SphereGeometry:_o,CylinderGeometry:ti};',context);
 const T=context.three;
 const canvasContext={clearRect(){},fillRect(){},beginPath(){},roundRect(){},fill(){},fillText(){},measureText(s){return {width:s.length*12};}};
 context.document={createElement(){return {getContext:()=>canvasContext};}};
-vm.runInContext(read('quest-panel.js')+read('quest-hands.js')+';globalThis.api={createQuestPanel,questSafePosition,createQuestHandVisual};',context);
+vm.runInContext(read('quest-panel.js')+read('quest-hands.js')+read('quest-lighting.js')+';globalThis.api={createQuestLighting,createQuestPanel,questSafePosition,createQuestHandVisual};',context);
 
 function panelFixture(){
   const state={model:'50',models:['50','60','62','69'].map(value=>({value,label:value+' m²'})),modelDescription:'50 m² · 2 quartos',facades:['Contemporânea','Madeira natural','Urbana grafite','Minimalista areia','Clássica clean'],facade:0,high:false,garage:true,garageSpaces:1,twoSpaces:false,width:12,depth:21,furniture:true,evening:false,boundary:true,amplitude:1,destinations:[{id:'entry',name:'Entrada'}]};
@@ -50,6 +50,10 @@ test('safe destinations respect room bounds and avoid new furniture and walls',(
   const p=context.api.questSafePosition(physics,{x:0,z:0},bounds);assert.ok(p);assert.equal(physics.blocked(p.x,p.z),false);assert.ok(Math.abs(p.x)<=.8&&Math.abs(p.z)<=.8);
   assert.equal(context.api.questSafePosition({...physics,blocked:()=>true},{x:0,z:0},bounds),null);
 });
+test('an open panel remains reachable after recentering or walking physically',()=>{
+  const f=panelFixture(),head=new T.Vector3(5,1.65,5);f.panel.ensureReachable(head,new T.Vector3(0,0,-1));
+  assert.ok(f.panel.root.position.distanceTo(head)<1.3);assert.ok(Math.abs(f.panel.root.position.y-head.y)<.2);f.panel.dispose();
+});
 test('hand visualization follows real joints and disappears on tracking loss',()=>{
   const hand=require('./hand-fixture.cjs')(T),originalCount=hand.children.length;
   const visual=context.api.createQuestHandVisual({...T,hand});
@@ -59,6 +63,16 @@ test('hand visualization follows real joints and disappears on tracking loss',()
   meshes[0].geometry.computeBoundingBox();assert.ok(meshes[0].geometry.boundingBox.max.y>.16,'skin reaches the fingertips');
   hand.visible=false;assert.equal(visual.update(),false);assert.ok(meshes.every(m=>!m.visible));
   visual.dispose();assert.equal(hand.children.length,originalCount);
+});
+test('Quest diffuse lighting keeps textures and colors, shares materials and restores desktop originals',()=>{
+  const scene=new T.Group(),geometry=new T.SphereGeometry(1,8,6),texture=new T.CanvasTexture({}),material=new T.MeshStandardMaterial({color:0xbbaabb,map:texture});
+  const meshes=[new T.Mesh(geometry,material),new T.Mesh(geometry,material)];meshes.forEach(m=>scene.add(m));
+  const lighting=context.api.createQuestLighting({...T,scene});lighting.apply();
+  assert.equal(lighting.count,2);assert.ok(meshes[0].material.isMeshBasicMaterial);assert.equal(meshes[0].material,meshes[1].material);assert.equal(meshes[0].material.map,texture);
+  assert.notEqual(meshes[0].geometry,geometry);assert.equal(geometry.attributes.color,undefined);
+  const colors=meshes[0].geometry.attributes.color.array;assert.ok([...colors].every(v=>Number.isFinite(v)&&v>0));assert.ok(Math.max(...colors)>Math.min(...colors)*1.4);
+  lighting.restore();assert.equal(lighting.count,0);assert.equal(meshes[0].geometry,geometry);assert.equal(meshes[0].material,material);assert.equal(material.vertexColors,false);
+  lighting.apply();lighting.restore();assert.equal(meshes[1].geometry,geometry);
 });
 
 test('live VR choices preserve headset pose, floor height and the session while avoiding replacement walls',async()=>{

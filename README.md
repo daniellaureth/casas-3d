@@ -6,6 +6,10 @@ Endereço público: **https://daniellaureth.github.io/casas-3d/**
 No Quest, abra o endereço HTTPS do GitHub Pages no **Meta Quest Browser**.
 Escolha planta e fachada e toque em **Entrar em VR**. Não precisa de computador,
 Air Link, Link, servidor local ou assinatura depois da publicação.
+Ao entrar, uma tela de carregamento aparece **dentro dos dois olhos do VR**.
+Ela prepara a casa, a iluminação e os shaders; chega a 100% somente depois de
+renderizar a primeira imagem da casa. Então o painel de opções aparece ao alcance.
+O botão Sair do VR funciona também durante essa preparação.
 
 - Analógico esquerdo: andar; direito: girar 30° por toque.
 - Gatilho: apontar e escolher opções ou abrir/fechar a porta apontada, até 2,5 m.
@@ -43,6 +47,7 @@ O arquivo local `Casas3D.html` continua completo e portátil. Não há Vite nest
 
 A barra acompanha os bytes recebidos e as etapas de preparação; chega a 100% somente
 depois do primeiro quadro renderizado. Se o download falhar, aparece Tentar novamente.
+Essa barra inicial da página é independente do carregamento dentro do VR.
 Na sessão VR, erros de execução ou 20 segundos sem imagem, com o headset ativo,
 encerram o passeio e retornam ao navegador. Abrir o menu Meta pausa esse monitoramento.
 
@@ -60,6 +65,13 @@ real, texturas de superfície limitadas a 512 px, anisotropia 2, vegetação mai
 cores agrupadas por vértice e materiais compartilhados na renderização. O painel
 mantém sua resolução para legibilidade. WebXR usa resolução 0,8, foveação e solicita
 72 Hz somente quando suportado. A projeção da câmera é fornecida pelo headset.
+
+No VR standalone, a casa usa iluminação difusa calculada nos vértices, mantendo
+cores e texturas sem depender dos shaders PBR de iluminação/reflexos do aparelho.
+Reflexos e relevo fino dos materiais ficam simplificados nesse modo. A luz de
+entardecer continua disponível. Geometrias e materiais originais são restaurados
+ao sair, preservando a renderização do computador. O painel se reposiciona caso
+um recentramento ou deslocamento físico o deixe distante demais.
 
 Não há garantia de FPS sem medição nos óculos; o teste no computador não substitui
 a validação no Quest. A cabeça atravessando fisicamente uma parede ativa proteção
