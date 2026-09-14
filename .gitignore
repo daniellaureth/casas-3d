@@ -1,0 +1,12 @@
+Perfil*/
+Casas-3D/
+backups/
+dist/
+node_modules/
+.tools/
+.codex/
+.agents/
+tests/*.png
+tests/*report.json
+*.log
+*.zip

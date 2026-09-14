@@ -1,0 +1,56 @@
+CASAS 3D - APLICATIVO PORTATIL PARA WINDOWS
+
+1. Extraia o ZIP inteiro para uma pasta no seu computador.
+2. Abra "Abrir Casas 3D.cmd" com dois cliques.
+3. A navegacao fluida e a cobertura com telhas sao automaticas.
+
+PASSEIO EM PRIMEIRA PESSOA
+Clique em "Passeio em primeira pessoa" uma vez para entrar.
+Mova o mouse para olhar, sem segurar ou clicar no botao.
+Use WASD ou as setas para andar e Shift para acelerar.
+Paredes, vidros, moveis e portas fechadas bloqueiam a passagem.
+Aproxime-se de uma porta, olhe para ela e pressione E para abrir ou fechar.
+O personagem acompanha o piso e sobe os degraus de entrada.
+O passeio usa o mesmo tratamento de iluminacao ao andar e ao parar,
+evitando alternancia de sombras e efeitos. A disposicao dos moveis reserva
+espaco junto as portas e passagens, com conjuntos compactos onde necessario.
+As portas dos quartos e banheiros abrem para dentro desses ambientes,
+mantendo os corredores livres.
+Use "Opcoes da casa (Tab)" para trocar a planta, fachada, garagem ou lote
+durante o passeio. O painel libera o mouse e pausa o movimento.
+Use "Voltar ao passeio" para continuar na mesma posicao e direcao.
+Se uma nova parede ou movel ocupar sua posicao, ela e ajustada para
+um ponto livre proximo, mantendo a primeira pessoa.
+Pressione Esc para sair e voltar a camera anterior.
+Se o navegador nao permitir capturar o cursor, mova o mouse sobre
+a cena para olhar. Ao trocar de janela, o passeio pausa no painel de opcoes.
+Depois de atualizar os arquivos, feche e abra o aplicativo novamente.
+
+META QUEST 3 / 3S
+Para usar SEM FIO, conecte o Air Link nos oculos e abra
+"Abrir Meta Quest sem fio.cmd" no notebook. Na janela da casa, clique
+em "Entrar na casa sem fio". "Abrir Meta Quest.cmd" tambem usa Air Link.
+O cabo continua disponivel em "Abrir Meta Quest USB.cmd".
+Veja LEIA-ME-QUEST.txt para os detalhes.
+Dentro dos oculos, o painel Minha casa permite trocar planta, fachada,
+terreno e outras escolhas. B/Y ou o botao Minha casa reabre o painel.
+O rastreamento de maos e usado quando a conexao disponibiliza esse recurso.
+
+O aplicativo abre em janela propria usando o Microsoft Edge instalado
+(ou Google Chrome, se Edge nao estiver disponivel). Nao e necessario
+instalar Node.js, manter o chat aberto ou ter internet para apresentar.
+Um servidor local temporario serve apenas esta apresentacao, somente
+no proprio computador. O perfil do aplicativo fica na pasta Perfil.
+
+COMO A FLUIDEZ FOI MELHORADA
+Durante o movimento, os efeitos mais pesados de pos-processamento sao
+adiados. Ao parar a camera, o acabamento completo volta automaticamente.
+A resolucao, as pecas, as texturas, os materiais e as sombras principais
+permanecem. O acabamento completo aparece automaticamente ao parar.
+
+No teste feito no Chrome separado com Intel UHD e 1600 x 900 pixels,
+a navegacao passou de aproximadamente 19 para 45 FPS. Esse teste nao
+garante o mesmo FPS em outras resolucoes, drivers ou computadores.
+
+Esta janela usa o motor do navegador; nao e um renderizador nativo novo.
+O ganho principal vem do modo de navegacao, nao apenas da embalagem.

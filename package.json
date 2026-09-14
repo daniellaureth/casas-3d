@@ -1,0 +1,14 @@
+{
+  "name": "casas-3d",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Casas 3D — computador e Meta Quest standalone",
+  "scripts": {
+    "sync": "node sync-quest.cjs && node sync-navigation.cjs",
+    "build": "npm run sync && node scripts/build.cjs",
+    "test": "node --experimental-vm-modules --test tests/*.test.cjs",
+    "dev": "node scripts/serve.cjs --source",
+    "preview": "node scripts/serve.cjs"
+  },
+  "engines": { "node": ">=22" }
+}

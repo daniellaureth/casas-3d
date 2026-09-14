@@ -1,0 +1,258 @@
+// WebXR uses the same house geometry, doors and collision world as the desktop tour.
+function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, makeCurtain, prepare, restore, getPhysics, invalidate, createPanel,createHand,createPointer,getConfiguration,changeConfiguration,airLink = /[?&]connection=airlink(?:&|$)/.test(window.location?.search || '') }) {
+  const button = document.getElementById('quest-vr');
+  const status = document.getElementById('quest-status');
+  const entryLabel = airLink ? 'Entrar na casa sem fio' : 'Entrar em VR · Quest';
+  let active = false, pending = false, session = null, rig = null, saved = null;
+  let lastTime = null, lastSafeHead = null, snapReady = true, curtain = null;
+  const head = new Vector3(), direction = new Vector3();
+  const rayOrigin=new Vector3(),rayDirection=new Vector3();
+  const rayControllers = [];
+  const handVisuals=[],pointers=[];
+  let panel=null,openPanelNextFrame=false,menuPressed=false,floorLevel=0,amplitude=1;
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType('local-floor');
+  renderer.xr.setFramebufferScaleFactor(0.8);
+
+  async function checkConnection() {
+    if (!airLink || active || pending) return;
+    button.textContent = entryLabel;
+    if (!navigator.xr || !window.isSecureContext) {
+      status.textContent = 'Feche esta janela e use o atalho Abrir Meta Quest sem fio no notebook.';
+      return;
+    }
+    if (!navigator.xr.isSessionSupported) return;
+    try {
+      const available = await navigator.xr.isSessionSupported('immersive-vr');
+      if (active || pending) return;
+      status.textContent = available
+        ? 'Óculos detectados. Clique em Entrar na casa sem fio e permita a entrada em VR.'
+        : 'Conecte o Air Link nos óculos e volte a esta janela na área de trabalho do notebook. Depois clique em Entrar na casa sem fio.';
+    } catch {
+      if (!active && !pending) status.textContent = 'Não foi possível verificar os óculos. Conecte o Air Link e clique em Entrar na casa sem fio para tentar.';
+    }
+  }
+
+  function finish() {
+    if (!saved) return;
+    active = false;
+    pending = false;
+    renderer.setAnimationLoop(null);
+    panel?.dispose();panel=null;
+    for(const item of handVisuals){item.visual.dispose();rig.remove(item.hand);}handVisuals.length=0;
+    for(const pointer of pointers)pointer?.dispose();pointers.length=0;
+    for (const controller of rayControllers) { controller.removeEventListener('select', interact); rig.remove(controller); }
+    rayControllers.length = 0;
+    camera.remove(curtain);
+    curtain?.geometry?.dispose(); curtain?.material?.dispose();
+    rig.remove(camera); scene.remove(rig);
+    if (saved.parent) saved.parent.add(camera);
+    camera.position.copy(saved.position); camera.quaternion.copy(saved.quaternion);
+    if(saved.scale)camera.scale.copy(saved.scale);
+    controls.enabled = saved.enabled;
+    renderer.shadowMap.enabled = saved.shadows;
+    renderer.shadowMap.needsUpdate = true;
+    saved = null; session = null; rig = null; curtain = null; lastSafeHead = null;
+    document.body.classList.remove('in-vr');
+    button.textContent = entryLabel;
+    button.disabled = false;
+    status.textContent = 'Sessão VR encerrada.';
+    // Let the XR manager finish its own session-end listeners before resizing.
+    queueMicrotask(() => { restore(); invalidate(); });
+  }
+
+  function doorInteraction() {
+    if (!active || curtain?.visible) return false;
+    const xrCamera = renderer.xr.getCamera();
+    xrCamera.getWorldPosition(head); xrCamera.getWorldDirection(direction);
+    return getPhysics().interact(head, direction);
+  }
+  function interact(event) {
+    if(!active||curtain?.visible)return;
+    if(event?.target&&panel?.select(event.target))return;
+    if(event?.target&&getPhysics().interactRay) {
+      event.target.updateWorldMatrix(true,false);
+      rayOrigin.setFromMatrixPosition(event.target.matrixWorld);
+      rayDirection.set(0,0,-1).transformDirection(event.target.matrixWorld);
+      getPhysics().interactRay(rayOrigin,rayDirection);
+    } else doorInteraction();
+  }
+  function putVisitorAt(point) {
+    const physics=getPhysics();camera.getWorldPosition(head);
+    rig.position.x+=point.x-head.x;rig.position.z+=point.z-head.z;
+    const floor=physics.floorAt(point.x,point.z);rig.position.y+=floor-floorLevel;floorLevel=floor;
+    lastSafeHead={x:point.x,y:floor+physics.eyeHeight,z:point.z};
+    rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);
+    camera.getWorldPosition(head);camera.getWorldDirection(direction);panel?.place(head,direction);
+  }
+  function applyConfiguration(key,value) {
+    if(key==='amplitude') {
+      amplitude=[1,1.4,2].includes(value)?value:1;
+      camera.getWorldPosition(head);const before=head.clone();
+      rig.scale.setScalar(1/amplitude);rig.updateMatrixWorld(true);camera.getWorldPosition(head);
+      rig.position.x+=before.x-head.x;rig.position.y+=before.y-head.y;rig.position.z+=before.z-head.z;
+      rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);
+      return amplitude===1?'Escala visual normal.':'Sensação de espaço ampliada. As medidas do projeto não mudaram.';
+    }
+    camera.getWorldPosition(head);const previous={x:head.x,z:head.z};
+    const message=changeConfiguration(key,value);
+    const safe=questSafePosition(getPhysics(),previous);
+    if(safe){putVisitorAt(safe);if(Math.hypot(safe.x-previous.x,safe.z-previous.z)>.02)return 'Escolha aplicada. Sua posição foi ajustada para um espaço livre.';}
+    return message;
+  }
+  function navigate(id) {
+    const destination=getConfiguration().destinations.find(d=>d.id===id);
+    if(!destination)return 'Ambiente indisponível.';
+    const safe=questSafePosition(getPhysics(),destination,destination.bounds);
+    if(!safe)return 'Não há espaço livre suficiente nesse ambiente.';
+    putVisitorAt(safe);return 'Você está em '+destination.name+'.';
+  }
+
+  function frame(time) {
+    if (!active || !renderer.xr.isPresenting) return;
+    const delta = lastTime === null ? 0 : Math.min((time - lastTime) / 1000, 0.05);
+    lastTime = time;
+    rig.updateMatrixWorld(true);
+    renderer.xr.updateCamera(camera);
+    const xrCamera = renderer.xr.getCamera(), physics = getPhysics();
+    xrCamera.getWorldPosition(head); xrCamera.getWorldDirection(direction);
+    if (!lastSafeHead) {
+      const spawn = physics.spawn;
+      rig.position.x += spawn.x-head.x; rig.position.z += spawn.z-head.z;
+      head.x=spawn.x; head.z=spawn.z;
+      if(typeof questProfile!=='undefined'&&questProfile.lightweight) {
+        // Calibrate once, also for a seated client; subsequent head motion stays native.
+        const eye=floorLevel+physics.eyeHeight;rig.position.y+=eye-head.y;head.y=eye;
+      }
+    }
+    const floor = physics.floorAt(head.x, head.z);
+    // Physical room movement cannot be stopped by software. Hide the scene while
+    // the tracked head crosses a wall; only returning to the clear side restores it.
+    if (!lastSafeHead) lastSafeHead = {x:head.x,y:floor+physics.eyeHeight,z:head.z};
+    curtain.visible = physics.headPathBlocked?.(lastSafeHead,head) ?? false;
+    if(openPanelNextFrame){openPanelNextFrame=false;panel?.open(head,direction);}
+    let forward = 0, right = 0, turn = 0;
+    let menuDown=false;
+    for (const input of session.inputSources) {
+      if (!input.gamepad) continue;
+      if(!input.hand&&input.gamepad.buttons?.[5]?.pressed)menuDown=true;
+      const axes = input.gamepad.axes;
+      if (input.handedness === 'left') { right = axes[2] ?? axes[0] ?? 0; forward = -(axes[3] ?? axes[1] ?? 0); }
+      if (input.handedness === 'right') turn = axes[2] ?? axes[0] ?? 0;
+    }
+    if(menuDown&&!menuPressed&&panel){if(panel.visible)panel.close();else panel.open(head,direction);}menuPressed=menuDown;
+    if(panel?.visible)forward=right=turn=0;
+    if (!curtain.visible) {
+      const length = Math.hypot(direction.x,direction.z) || 1;
+      const fx = direction.x/length, fz = direction.z/length;
+      if (Math.abs(forward)<0.18) forward=0;
+      if (Math.abs(right)<0.18) right=0;
+      const inputLength = Math.max(1,Math.hypot(forward,right)), step=1.5*delta/inputLength;
+      const body = {x:head.x,y:floorLevel+physics.eyeHeight,z:head.z};
+      physics.move(body,(fx*forward-fz*right)*step,(fz*forward+fx*right)*step,delta);
+      rig.position.x += body.x-head.x; rig.position.z += body.z-head.z;
+      const nextFloor=body.y-physics.eyeHeight;rig.position.y+=nextFloor-floorLevel;floorLevel=nextFloor;
+      if (Math.abs(turn)<0.25) snapReady=true;
+      if (Math.abs(turn)>0.65 && snapReady) {
+        snapReady=false;
+        rig.updateMatrixWorld(true);
+        const before=camera.getWorldPosition(new Vector3());
+        rig.rotation.y-=Math.sign(turn)*Math.PI/6;
+        rig.updateMatrixWorld(true);
+        const after=camera.getWorldPosition(new Vector3());
+        rig.position.x+=before.x-after.x; rig.position.z+=before.z-after.z;
+      }
+      lastSafeHead={x:body.x,y:body.y,z:body.z};
+      physics.update(delta,lastSafeHead);
+    }
+    rig.updateMatrixWorld(true);
+    let visibleHands=false;for(const item of handVisuals)visibleHands=item.visual.update()||visibleHands;
+    const handFeature=session.enabledFeatures?.includes('hand-tracking');
+    const hint=visibleHands?'Mãos ativas: aponte e junte polegar e indicador.':handFeature?'Apoie os controles para usar as mãos, ou use o gatilho.':'Use o gatilho. Mãos dependem do suporte desta conexão.';
+    const hits=panel?.update(rayControllers,hint)||[];
+    pointers.forEach((pointer,i)=>{
+      const controller=rayControllers[i];rayOrigin.setFromMatrixPosition(controller.matrixWorld);
+      rayDirection.set(0,0,-1).transformDirection(controller.matrixWorld);
+      const hit=hits[i]||(!panel?.visible&&physics.raycastDoor?.(rayOrigin,rayDirection));
+      pointer?.update(hit,amplitude);
+    });
+    renderer.info.reset();
+    renderer.render(scene,camera);
+  }
+
+  async function enter() {
+    if (pending) return;
+    if (active) { await session.end(); return; }
+    if (!navigator.xr || !window.isSecureContext) {
+      status.textContent = airLink
+        ? 'Feche esta janela e use o atalho Abrir Meta Quest sem fio no notebook, com o Air Link conectado nos óculos.'
+        : 'Abra o link HTTPS publicado diretamente no Meta Quest Browser dos óculos e toque em Entrar em VR.';
+      return;
+    }
+    pending=true; button.disabled=true;
+    if (airLink) {
+      button.textContent='Aguardando os óculos…';
+      status.textContent='Permita a entrada em VR no navegador, se solicitado. Mantenha os óculos em uso e o Air Link conectado.';
+    }
+    try {
+      // Must be called directly from the user's click, before asynchronous setup.
+      session=await navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor'],optionalFeatures:['bounded-floor','hand-tracking']});
+      if (airLink) status.textContent='Preparando a casa para os óculos…';
+      prepare();
+      saved={parent:camera.parent,position:camera.position.clone(),quaternion:camera.quaternion.clone(),scale:camera.scale?.clone(),enabled:controls.enabled,shadows:renderer.shadowMap.enabled};
+      controls.enabled=false;
+      rig=new Group(); scene.add(rig); rig.add(camera);
+      const p=getPhysics(), spawn=p.spawn;
+      rig.position.set(spawn.x,p.floorAt(spawn.x,spawn.z),spawn.z);
+      floorLevel=p.floorAt(spawn.x,spawn.z);amplitude=1;menuPressed=false;
+      camera.position.set(0,0,0); camera.rotation.set(0,0,0); camera.clearViewOffset();
+      curtain=makeCurtain(); curtain.visible=false; camera.add(curtain);
+      renderer.shadowMap.enabled=false;
+      for(let i=0;i<2;i++) {
+        const controller=renderer.xr.getController(i);rig.add(controller);controller.addEventListener('select',interact);rayControllers.push(controller);
+        pointers.push(createPointer?.(controller));
+        if(createHand&&renderer.xr.getHand){const hand=renderer.xr.getHand(i);rig.add(hand);handVisuals.push({hand,visual:createHand(hand)});}
+      }
+      panel=createPanel?.({scene,camera,getState:()=>({...getConfiguration(),amplitude}),change:applyConfiguration,navigate,door:doorInteraction,exitVR:()=>session?.end()});
+      openPanelNextFrame=!!panel;
+      session.addEventListener('end',finish,{once:true});
+      lastTime=null; lastSafeHead=null; active=true;
+      document.body.classList.add('in-vr');
+      if (airLink) status.textContent='Conectando a imagem da casa aos óculos…';
+      await renderer.xr.setSession(session);
+      renderer.xr.setFoveation(1);
+      // Request a sustainable refresh rate only when the runtime advertises it.
+      if(typeof questProfile!=='undefined'&&questProfile.lightweight&&session.supportedFrameRates?.includes(72)) {
+        try { await session.updateTargetFrameRate(72); } catch { /* Runtime keeps its supported default. */ }
+      }
+      renderer.setAnimationLoop(frame);
+      pending=false; button.disabled=false; button.textContent='Sair do VR';
+      status.textContent='Minha casa: opções dentro dos óculos · Gatilho ou pinça: escolher · B/Y: painel · Analógicos: andar e girar';
+    } catch(error) {
+      const failedSession=session;
+      if (saved) finish();
+      if (failedSession) { try { await failedSession.end(); } catch {} }
+      session=null; active=false; pending=false; button.disabled=false;
+      button.textContent=entryLabel;
+      if (airLink) {
+        status.textContent = error.name === 'NotSupportedError'
+          ? 'Os óculos ainda não estão disponíveis para a casa. Conecte o Air Link; se já estiver conectado, feche esta janela e abra novamente Abrir Meta Quest sem fio. Confira também OpenXR em Configurações > Geral no aplicativo Meta Horizon Link.'
+          : error.name === 'NotAllowedError' || error.name === 'SecurityError'
+            ? 'Permita a entrada em realidade virtual no navegador e clique novamente em Entrar na casa sem fio.'
+            : 'Não foi possível entrar na casa. Encerre outro aplicativo VR que esteja aberto e tente novamente com o Air Link conectado.';
+      } else {
+        status.textContent=error.name==='NotSupportedError' ? 'VR indisponível neste navegador. Abra este mesmo link HTTPS no Meta Quest Browser dos óculos.' : 'Não foi possível iniciar o VR. Permita a sessão imersiva no Meta Quest Browser e tente novamente.';
+      }
+      invalidate();
+    }
+  }
+  button.onclick=enter;
+  if (airLink) {
+    button.textContent=entryLabel;
+    status.textContent='Conecte o Air Link nos óculos e clique em Entrar na casa sem fio nesta janela do notebook.';
+    navigator.xr?.addEventListener?.('devicechange',checkConnection);
+    window.addEventListener?.('focus',checkConnection);
+    checkConnection();
+  }
+  return {get active(){return active;},get diagnostics(){return {active,amplitude,panelOpen:!!panel?.visible,handFeature:session?.enabledFeatures?.includes('hand-tracking')??null,handInputs:Array.from(session?.inputSources||[]).filter(input=>input.hand).length};},enter,checkConnection,end:()=>session?.end()};
+}

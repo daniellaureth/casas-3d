@@ -1,0 +1,109 @@
+CASAS 3D - META QUEST 3 / 3S
+
+SEM FIO PELO AIR LINK (RECOMENDADO PARA ESTE NOTEBOOK)
+
+1. Conecte o Quest ao notebook pelo Air Link, como voce ja faz para
+   enxergar a area de trabalho do computador nos oculos.
+2. No notebook, abra "Abrir Meta Quest sem fio.cmd".
+   O atalho "Abrir Meta Quest.cmd" tambem abre este modo.
+3. Na janela da casa, escolha a planta e clique em "Entrar na casa sem fio".
+   Voce pode clicar pelo desktop do Air Link, usando o controle do Quest.
+4. Permita a entrada em realidade virtual se o navegador perguntar.
+5. Mantenha o Air Link e a janela do atalho abertos durante a visita.
+
+Neste modo o notebook processa a casa e o Air Link leva a imagem aos
+oculos por Wi-Fi. Nao precisa conectar USB, ativar depuracao ou abrir
+localhost no navegador do Quest. A casa abre no navegador DO NOTEBOOK.
+Nao precisa publicar o projeto nem ter internet para carregar a casa.
+
+O atalho usa Chrome (ou Edge, se necessario) em um perfil separado,
+configurado para usar OpenXR e preferir a placa de video dedicada.
+A configuracao geral de VR do Windows
+nao e alterada. O servidor continua acessivel apenas no proprio notebook.
+
+SE NAO ENTRAR
+
+- Se aparecer "Conecte o Air Link", confirme que entrou no desktop
+  do notebook nos oculos. Volte a janela da casa e tente o botao novamente.
+- Se conectou depois de abrir a casa e ela ainda nao detectar os oculos,
+  feche a janela da casa e abra novamente o atalho sem fio.
+- No aplicativo Meta Horizon Link do notebook, Configuracoes > Geral,
+  defina a Meta como runtime OpenXR ativo, se ainda nao estiver ativa.
+- Permita a entrada em VR quando o navegador perguntar.
+- Durante "Aguardando os oculos", mantenha o Quest em uso e o Air Link
+  ativo. A sessao pode esperar os oculos sairem do repouso.
+- Se o aplicativo Meta bloquear a execucao por ser de fonte desconhecida,
+  habilite Fontes desconhecidas nas configuracoes gerais da Meta.
+- Encerre outro aplicativo VR que esteja ocupando os oculos e tente novamente.
+
+O programa confirma se o navegador detecta um headset, mas nao consegue
+identificar se o transporte do Link e Wi-Fi ou USB. Para testar sem fio,
+deixe o cabo desconectado. Ver o desktop no Air Link e apenas o primeiro
+passo; o botao "Entrar na casa sem fio" inicia a visita imersiva.
+
+ALTERNATIVA - USB, RENDERIZACAO NO QUEST
+
+O fluxo anterior continua disponivel em "Abrir Meta Quest USB.cmd":
+1. Ative o modo desenvolvedor no Quest pelo processo oficial da Meta.
+2. Instale Android Platform Tools:
+   https://developer.android.com/tools/releases/platform-tools
+   Extraia platform-tools ao lado deste arquivo ou configure adb no PATH.
+3. Conecte o cabo USB de dados e autorize a depuracao nos oculos.
+4. Abra "Abrir Meta Quest USB.cmd" e mantenha a janela e o cabo conectados.
+5. No navegador DO QUEST, abra http://localhost:8765/ se nao abrir sozinho.
+6. Clique em "Entrar em VR - Quest".
+
+CONTROLES NO HEADSET
+
+- Olhar: mova a cabeca.
+- Analogico esquerdo: andar com colisao.
+- Analogico direito: girar em passos de 30 graus.
+- B ou Y: abrir / fechar o painel Minha casa.
+- Aponte para uma escolha do painel e aperte o gatilho.
+- Olhe para uma porta proxima e aperte o gatilho para abrir ou fechar.
+- Saia da sessao pelo menu do Quest ou pelo botao de saida do navegador.
+- Se a cabeca atravessar uma parede por movimento fisico, a cena escurece
+  ate voce voltar para o lado livre.
+
+MINHA CASA - ESCOLHAS DENTRO DOS OCULOS
+
+O painel abre ao entrar no VR. Use Fechar para passear. Para reabrir,
+aponte para Minha casa, abaixo da visao, ou pressione B/Y.
+- Casa: planta, fachada, sala alta, garagem e quantidade de vagas.
+- Terreno: tamanhos prontos ou medidas personalizadas.
+- Passeio: moveis, luz, muros, ir para ambientes e acionar uma porta.
+- Visao: sensacao de espaco Normal, Ampla ou Muito ampla.
+As escolhas usam as mesmas verificacoes do painel do notebook.
+Se a nova planta ocupar sua posicao, o visitante vai para um ponto livre.
+Ir para um ambiente faz um deslocamento direto ate um local desocupado.
+Enquanto o painel esta aberto, os analogicos de locomocao ficam pausados.
+
+AMPLITUDE E COLISOES
+
+Ampla e Muito ampla alteram a escala percebida pelo visitante; nao alteram
+as medidas do projeto. Use Normal para avaliar o tamanho real dos ambientes.
+O ajuste nao substitui a lente fisica dos oculos por uma lente de celular.
+A imagem nao escurece ao encostar ou inclinar a cabeca junto aos moveis.
+A caminhada continua com colisao. A protecao visual fica restrita a cabeca
+atravessando paredes, vidros ou portas; volte para o lado livre para ver.
+
+MAOS SEM CONTROLES
+
+O aplicativo solicita rastreamento das maos quando a conexao oferece esse
+recurso. Ative o rastreamento de maos no Quest, apoie os controles e mostre
+as maos a frente. Quando os dados chegam ao aplicativo, as maos aparecem.
+Aponte para o painel e junte polegar e indicador para selecionar.
+Use Passeio > Ir para um ambiente para se deslocar sem os analogicos.
+A pinca com a palma virada para o rosto e um gesto reservado ao sistema
+Meta; use a pinca comum, apontando para a escolha do painel.
+
+O suporte do navegador do Quest e o suporte do Air Link no Windows podem
+ser diferentes. Ter maos no menu do sistema nao comprova que o navegador
+do notebook recebe seus dados. Quando nao chegam, use os controles; o
+painel e a visita continuam disponiveis. A confirmacao depende do teste
+na combinacao de headset, navegador e runtime instalada.
+
+DOCUMENTACAO OFICIAL
+https://developers.meta.com/horizon/documentation/unreal/unreal-link/
+https://developers.meta.com/horizon/documentation/web/browser-remote-debugging/
+https://developers.meta.com/horizon/documentation/web/webxr-hands/
