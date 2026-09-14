@@ -6,7 +6,7 @@ const path=require('node:path');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 const html=read('Casas3D.html');
 const context=vm.createContext({console,AbortController,performance,URL});
-vm.runInContext(html.slice(html.indexOf('// BEGIN QUEST GRAPHICS'),html.indexOf('let walkPhysics=null'))+';globalThis.three={Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:Gr,Vector3:q,InstancedMesh:vu,SphereGeometry:_o,CylinderGeometry:ti};',context);
+vm.runInContext(html.slice(html.indexOf('// BEGIN QUEST GRAPHICS'),html.indexOf('let walkPhysics=null'))+';globalThis.three={Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,MeshStandardMaterial:Gr,BufferGeometry:je,BufferAttribute:me,Vector3:q,InstancedMesh:vu,SphereGeometry:_o,CylinderGeometry:ti};',context);
 const T=context.three;
 const canvasContext={clearRect(){},fillRect(){},beginPath(){},roundRect(){},fill(){},fillText(){},measureText(s){return {width:s.length*12};}};
 context.document={createElement(){return {getContext:()=>canvasContext};}};
@@ -51,12 +51,14 @@ test('safe destinations respect room bounds and avoid new furniture and walls',(
   assert.equal(context.api.questSafePosition({...physics,blocked:()=>true},{x:0,z:0},bounds),null);
 });
 test('hand visualization follows real joints and disappears on tracking loss',()=>{
-  const hand=new T.Group();hand.joints={};
-  for(const [name,x] of [['index-finger-phalanx-distal',0],['index-finger-tip',.025]]){const j=new T.Group();j.position.set(x,1,0);j.jointRadius=.006;hand.joints[name]=j;}
+  const hand=require('./hand-fixture.cjs')(T),originalCount=hand.children.length;
   const visual=context.api.createQuestHandVisual({...T,hand});
-  assert.equal(visual.update(),true);assert.equal(hand.children[0].count,2);assert.equal(hand.children[1].count,1);
-  hand.visible=false;assert.equal(visual.update(),false);assert.equal(hand.children[0].count,0);
-  visual.dispose();assert.equal(hand.children.length,0);
+  assert.equal(visual.update(),true);const meshes=hand.children.filter(c=>c.isMesh);assert.equal(meshes.length,3);
+  assert.equal(meshes[1].count,3);assert.equal(meshes[2].count,5);
+  for(const attribute of ['position','normal'])assert.ok(Array.from(meshes[0].geometry.attributes[attribute].array).every(Number.isFinite));
+  meshes[0].geometry.computeBoundingBox();assert.ok(meshes[0].geometry.boundingBox.max.y>.16,'skin reaches the fingertips');
+  hand.visible=false;assert.equal(visual.update(),false);assert.ok(meshes.every(m=>!m.visible));
+  visual.dispose();assert.equal(hand.children.length,originalCount);
 });
 
 test('live VR choices preserve headset pose, floor height and the session while avoiding replacement walls',async()=>{

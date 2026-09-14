@@ -31,16 +31,16 @@ function questChangeConfiguration(key,value) {
 }
 questMode=createQuestVR({renderer:ee,scene:Tn,camera:Je,controls:xe,Group:Ce,Vector3:q,
   getConfiguration:questConfiguration,changeConfiguration:questChangeConfiguration,
-  createPanel(options){return createQuestPanel({...options,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:Gr,Vector3:q});},
-  createHand(hand){return createQuestHandVisual({hand,Group:Ce,InstancedMesh:vu,SphereGeometry:_o,CylinderGeometry:ti,MeshBasicMaterial:Gr,Vector3:q});},
+  createPanel(options){return createQuestPanel({...options,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,Vector3:q});},
+  createHand(hand){return createQuestHandVisual({hand,Group:Ce,Mesh:Zt,InstancedMesh:vu,BufferGeometry:je,BufferAttribute:me,SphereGeometry:_o,MeshStandardMaterial:Gr,Vector3:q});},
   createPointer(controller){
-    const material=new Gr({color:0x78af87,depthTest:false,depthWrite:false,toneMapped:false});
+    const material=new zo({color:0x78af87,depthTest:false,depthWrite:false,toneMapped:false});
     const beam=new Zt(new ti(.0015,.0015,1,6),material),dot=new Zt(new _o(.006,8,6),material);
     beam.rotation.x=Math.PI/2;beam.renderOrder=1002;dot.renderOrder=1003;controller.add(beam,dot);
     return {update(hit,scale){const distance=(hit?.distance||.65)*scale;beam.scale.y=distance;beam.position.z=-distance/2;dot.position.z=-distance;dot.visible=!!hit;material.color.set(hit?.button&&!hit.button.disabled?0xf0bf67:0x78af87);},
       dispose(){controller.remove(beam,dot);beam.geometry.dispose();dot.geometry.dispose();material.dispose();}};
   },
-  makeCurtain(){const mesh=new Zt(new Ns(4,4),new Gr({color:0,depthTest:false,depthWrite:false}));mesh.position.z=-0.2;mesh.renderOrder=9999;mesh.frustumCulled=false;return mesh;},
+  makeCurtain(){const mesh=new Zt(new Ns(4,4),new zo({color:0,depthTest:false,depthWrite:false}));mesh.position.z=-0.2;mesh.renderOrder=9999;mesh.frustumCulled=false;return mesh;},
   prepare(){
     walkMode.stop();ke();ji(100);hn=100;Vn=false;Xe=0;Un=Number(Zn);De=null;Bn=null;dc(100);
     et('xray').setAttribute('aria-pressed','false');

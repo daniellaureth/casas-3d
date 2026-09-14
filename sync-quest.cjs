@@ -10,6 +10,8 @@ else patch('const vo=',source+'const vo=');
 patch('n.wrapS=n.wrapT=Hn,n.anisotropy=8,','questLimitTexture(n),n.wrapS=n.wrapT=Hn,n.anisotropy=questProfile.anisotropy,');
 patch('r.anisotropy=8,Pa.set(i,r)','r.anisotropy=questProfile.anisotropy,Pa.set(i,r)');
 patch('ee.setPixelRatio(Math.min(devicePixelRatio,1.5));ee.shadowMap.enabled=!0;','ee.setPixelRatio(Math.min(devicePixelRatio,questProfile.pixelRatio));ee.shadowMap.enabled=questProfile.shadows;');
+patch('new Hm({canvas:et("scene"),antialias:!0,powerPreference:"high-performance"})',
+  'new Hm({canvas:et("scene"),context:questProfile.standalone?et("scene").getContext("webgl2",{xrCompatible:true,antialias:true,alpha:false,powerPreference:"high-performance"}):null,antialias:!0,powerPreference:"high-performance"})');
 patch('o.shadow.mapSize.set(2048,2048)','o.shadow.mapSize.set(questProfile.shadowSize,questProfile.shadowSize)');
 patch('new Xo(1,2);K.deleteAttribute','new Xo(1,questProfile.lightweight?1:2);K.deleteAttribute');
 patch('for(let M=-12;M<13;M++){const O=new Zt(new ye(1.5,.01,.09),_e(13880241));O.position.set(M*4,.025,y(b.z0-4.2)),u.add(O)}',

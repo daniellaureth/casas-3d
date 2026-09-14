@@ -4968,7 +4968,7 @@ void main() {
 
 			#endif
 
-		}`};class qx extends ri{constructor(){super(),this.uniforms=ze.clone(kr.uniforms),this.material=new Hu({name:kr.name,uniforms:this.uniforms,vertexShader:kr.vertexShader,fragmentShader:kr.fragmentShader}),this._fsQuad=new Ys(this.material),this._outputColorSpace=null,this._toneMapping=null}render(t,e,n){this.uniforms.tDiffuse.value=n.texture,this.uniforms.toneMappingExposure.value=t.toneMappingExposure,(this._outputColorSpace!==t.outputColorSpace||this._toneMapping!==t.toneMapping)&&(this._outputColorSpace=t.outputColorSpace,this._toneMapping=t.toneMapping,this.material.defines={},Qt.getTransfer(this._outputColorSpace)===ne&&(this.material.defines.SRGB_TRANSFER=""),this._toneMapping===vl?this.material.defines.LINEAR_TONE_MAPPING="":this._toneMapping===Ul?this.material.defines.REINHARD_TONE_MAPPING="":this._toneMapping===Vl?this.material.defines.CINEON_TONE_MAPPING="":this._toneMapping===Vo?this.material.defines.ACES_FILMIC_TONE_MAPPING="":this._toneMapping===Hl?this.material.defines.AGX_TONE_MAPPING="":this._toneMapping===Gl?this.material.defines.NEUTRAL_TONE_MAPPING="":this._toneMapping===ql&&(this.material.defines.CUSTOM_TONE_MAPPING=""),this.material.needsUpdate=!0),this.renderToScreen===!0?(t.setRenderTarget(null),this._fsQuad.render(t)):(t.setRenderTarget(e),this.clear&&t.clear(t.autoClearColor,t.autoClearDepth,t.autoClearStencil),this._fsQuad.render(t))}dispose(){this.material.dispose(),this._fsQuad.dispose()}}let walkPhysics=null;let questMode=null;let walkMode=null;const et=i=>document.getElementById(i);await Bm();const qs=new Jo,Tn=new Jo;Tn.background=new Wt(15331050);Tn.fog=new Wr(15331050,45,100);const Je=new Qe(38,innerWidth/innerHeight,.1,500);let ee;try{ee=new Hm({canvas:et("scene"),antialias:!0,powerPreference:"high-performance"})}catch(i){throw et("error").hidden=!1,et("error").textContent="Não foi possível iniciar o 3D. Ative a aceleração gráfica do navegador e recarregue.",i}ee.setPixelRatio(Math.min(devicePixelRatio,questProfile.pixelRatio));ee.shadowMap.enabled=questProfile.shadows;ee.shadowMap.autoUpdate=!1;ee.shadowMap.type=El;ee.toneMapping=Vo;ee.toneMappingExposure=1.06;ee.localClippingEnabled=!0;const xd=Px(Tn,ee),Ti=questProfile.lightweight?{setSize(){},render(){ee.render(Tn,Je)}}:new vx(ee);if(!questProfile.lightweight){Ti.addPass(new Ux(Tn,Je));const oc=new An(Tn,Je,innerWidth,innerHeight);oc.updateGtaoMaterial({radius:.55,thickness:1,distanceExponent:2,scale:1,samples:8});oc.blendIntensity=1.15;Ti.addPass(oc);const Hx=new hs(new xt(innerWidth,innerHeight),.12,.35,1.5);Ti.addPass(Hx);const Gx=new Ox;Ti.addPass(Gx);Ti.addPass(new qx);}const xe=new zm(Je,ee.domElement);xe.enableDamping=!0;xe.maxPolarAngle=Math.PI*.485;xe.minDistance=6;xe.maxDistance=110;xe.enablePan=!0;let ue,cc,mi,Be=100,hn=100,yi=!1,Vn=!1,Po=0,Re={width:12,depth:21},vs=!1,Xi=!1,Fn,Xe=0,Un=1,Zn=!0,fs=!1,_i=0;const kn=Object.fromEntries(Object.entries(ei).map(([i,t])=>[i,{facade:0,high:t.high,openingHigh:t.high,roof:"fiber",garage:!1,garageSpaces:1}])),Bx=new URLSearchParams(location.search).get("render")!=="original";let Ad="fluid",Sd="complete",gs="",Eo="",bn=null,Br=0,$i=!0,Io=performance.now(),Hs=0,Md={};function Gn(){if(questMode?.active)return;$i=!0,!Br&&!document.hidden&&(Br=requestAnimationFrame(zx))}function bd(){bn&&(Tn.remove(bn),Nm(bn),bn=null),Eo="",ue&&(ue.visible=!0)}try{const i=JSON.parse(localStorage.getItem("casa-config-v3")||"null");if(i&&ei[i.model]){zr(ei[i.model],i.lot.width,i.lot.depth),Re=i.lot,et("model").value=i.model;for(const t of Object.keys(kn))i.options?.[t]&&(kn[t]={facade:Math.max(0,Math.min(4,Number(i.options[t].facade)||0)),high:!!i.options[t].high,openingHigh:!!(i.options[t].openingHigh??i.options[t].high),roof:"fiber",garage:!!i.options[t].garage,garageSpaces:i.options[t].garageSpaces===2?2:1});et("lot-width").value=Re.width,et("lot-depth").value=Re.depth,et("lot-preset").value="custom"}}catch{}function Dx(){try{localStorage.setItem("casa-config-v3",JSON.stringify({model:et("model").value,lot:Re,options:kn}))}catch{}}let De=null,Bn=null;function As(i=!1){if(walkMode?.active||questMode?.active)return;const{plan:t,site:e}=ue.userData,n=new q(0,1,0);if(i)n.set((e.x0+e.x1)/2-t.w/2,0,-(e.z0+e.z1)/2+t.d/2),De=n.clone().add(new q(.01,Math.max(e.depth,e.width)*2.5,.01));else if(Vn){const s=t.rooms.flatMap(a=>[a[1],a[1]+a[3]]),r=t.rooms.flatMap(a=>[a[2],a[2]+a[4]]);n.set((Math.min(...s)+Math.max(...s))/2-t.w/2,0,t.d/2-(Math.min(...r)+Math.max(...r))/2),De=n.clone().add(new q(.001,Math.max(t.d,t.w)*2.65,.001))}else De=new q(t.w*.5,4.5,Math.max(16,t.d*1.55)),n.set(0,1.6,t.d*.1);Bn=n}function Va(i){i?.traverse(t=>{t.geometry?.dispose(),t.material&&(t.material.userData?.ownedTexture?.dispose(),t.material.userData?.ownedTextures?.forEach(e=>e.dispose()),t.isSprite&&t.material.map?.dispose(),t.material.dispose())})}function Cx(){const i=ue.userData.site;et("lot-area").textContent=i.area.toLocaleString("pt-BR",{maximumFractionDigits:2})+" m²",et("setbacks").textContent=`Frente: ${i.front.toLocaleString("pt-BR")} m · Esquerda: ${i.left.toLocaleString("pt-BR",{maximumFractionDigits:2})} m · Direita: ${i.right.toLocaleString("pt-BR",{maximumFractionDigits:2})} m · Fundos: ${i.rear.toLocaleString("pt-BR",{maximumFractionDigits:2})} m`,et("lot-error").textContent=""}function ki({keepView:i=!1}={}){bd();const t=xx(et("model").value,Re,kn[et("model").value]);ue&&(Tn.remove(ue),Va(ue)),mi&&(qs.remove(mi),Va(mi)),Fn&&(qs.remove(Fn),Va(Fn)),ue=t,cc=ue.userData.groups,Tn.add(ue),mi=px(ue.userData.plan,ue.userData.site),qs.add(mi),mi.visible=et("dimensions").checked,Fn=Sx(ue.userData.plan,ue.userData.site),qs.add(Fn),Fn.visible=et("house-dimensions").getAttribute("aria-pressed")==="true",xd.rebuild(ue.userData.plan,ue.userData.site),Cx(),Wx(),Dx(),gs="",i||As(),walkPhysics=createHousePhysics(ue,{Box3:si,onChange(){ee.shadowMap.needsUpdate=true;Gn()},boundaryVisible:()=>et("boundary").checked,furnitureVisible:()=>Zn}),walkMode?.refreshHouse(),dc(hn)}function lc(){if(questMode?.active)return;ee.setSize(innerWidth,innerHeight),Ti.setSize(innerWidth,innerHeight),Je.aspect=innerWidth/innerHeight,Je.setViewOffset(innerWidth,innerHeight,innerWidth>760&&!Xi?-150:0,20,innerWidth,innerHeight),walkMode?.active&&Je.clearViewOffset(),Je.updateProjectionMatrix(),Gn()}function dc(i){const t=[i.toFixed(4),Xe.toFixed(4),Un.toFixed(4),et("boundary").checked].join("|");t!==gs&&(gs=t,Gn(),cc.forEach((e,n)=>e.children.forEach((s,r)=>{let a=cx(i,n,r,e.children.length);!s.userData.keepAtFinish&&([2,3,4,5].includes(n)||n===1&&s.userData.baseY<.1)&&(a*=Math.max(0,Math.min(1,(94-i)/14)));let o=a,l=1,c=0;if([2,3,7].includes(n)&&s.isMesh){const d=s.geometry.parameters.height||0,u=s.userData.baseY-d/2;if(d){const p=Math.max(0,Math.min(d,1.15-u));l=1-Xe*(1-p/d),c=-d*(1-l)/2}}(n===6||s.userData.roofEquipment)&&(o*=1-Xe,c+=Xe*.8),s.userData.furniture&&(o*=Un,c+=(1-Un)*.35),s.userData.siteWall&&(l=1-Xe*.7,c=-(s.geometry.parameters.height||0)*(1-l)/2),s.visible=o>.002&&l>.002&&!(s.userData.siteWall&&!et("boundary").checked),s.scale.y=Math.max(.001,a*l),s.position.y=s.userData.baseY+c+(1-a)*.35,s.traverse(d=>{if(!d.isMesh)return;const u=o*(d.userData.baseOpacity??1);d.material.opacity=u,d.material.transparent=u<.999,d.material.depthWrite=u>.6,d.material.clippingPlanes=null,d.castShadow=u>.8})})),Fn.userData.rooms.visible=Xe>.85,ee.shadowMap.needsUpdate=!0)}function Wx(){const i=kn[et("model").value];et("high").checked=i.high,et("garage").checked=!!i.garage;const t=ue.userData.garage,e=!!sc(ue.userData.plan,ue.userData.site,2);et("garage-spaces").value=String(i.garageSpaces),et("garage-spaces").disabled=!i.garage,et("garage-spaces").options[1].disabled=!e,et("garage-spaces").options[1].textContent=e?"2 carros · 4,50 × 5,50 m":"2 carros · sem espaço neste lote";const n=i.garageSpaces===2?"4,50 × 5,50":"3,10 × 5,50";et("garage-status").textContent=i.garage?t.available?`Garagem de ${n} m · integrada à casa`:`A garagem de ${n} m não cabe no espaço externo disponível, mesmo sem recuo lateral.`:"",et("height-label").textContent=i.high?"3,90 m":"2,85 m",et("facade-description").textContent=ps[i.facade].description,Nx.forEach((s,r)=>s.setAttribute("aria-pressed",String(r===i.facade)))}const Nx=ps.map((i,t)=>{const e=document.createElement("button");return e.type="button",e.className="facade-choice",e.innerHTML=`<span class="facade-icon facade-${t}" style="--wall:#${i.wall.toString(16)};--accent:#${i.accent.toString(16)}"><i></i><b></b></span><span>${i.name}</span>`,e.setAttribute("aria-pressed","false"),e.onclick=()=>{ke(),kn[et("model").value].facade=t,ki()},et("facades").append(e),e});et("garage").onchange=()=>{ke(),De=null,Bn=null,kn[et("model").value].garage=et("garage").checked,ki({keepView:!0})};et("garage-spaces").onchange=()=>{ke(),De=null,Bn=null,kn[et("model").value].garageSpaces=Number(et("garage-spaces").value)===2?2:1,ki({keepView:!0})};et("high").onchange=()=>{ke(),De=null,Bn=null,kn[et("model").value].high=et("high").checked,ki({keepView:!0})};et("house-dimensions").onclick=()=>{const i=et("house-dimensions").getAttribute("aria-pressed")!=="true";et("house-dimensions").setAttribute("aria-pressed",String(i)),Fn.visible=i};et("furniture").onclick=()=>{ke(),Zn=!Zn,et("furniture").setAttribute("aria-pressed",String(Zn))};et("showcase").onclick=()=>{if(fs){ke();return}ke(),ji(100),fs=!0,_i=0,Ws(!1),et("showcase").setAttribute("aria-pressed","true"),et("showcase").textContent="Ⅱ Pausar tour da casa"};function Ws(i){Vn=i,et("xray").setAttribute("aria-pressed",String(Vn)),As()}const Yx=Xn.map((i,t)=>{const e=document.createElement("button");return e.className="step",e.innerHTML=`<b>${String(t+1).padStart(2,"0")}</b>${i[1]}`,e.onclick=()=>{ke(),ji(i[3])},et("steps").append(e),e});function ji(i){Be=Math.max(0,Math.min(100,Number(i))),et("progress").value=Be;const t=ox(Be);et("percent").innerHTML=`${Math.round(Be)}<span>%</span>`,et("stage").textContent=Xn[t][1],et("detail").textContent=Xn[t][4],et("progress").setAttribute("aria-valuetext",`${Math.round(Be)} por cento, ${Xn[t][1]}`),Yx.forEach((e,n)=>{e.classList.toggle("active",n===t),e.classList.toggle("done",Be>=Xn[n][3])})}function ke(){if(!walkMode?.settingsOpen)walkMode?.stop();yi=!1,fs=!1,et("showcase").setAttribute("aria-pressed","false"),et("showcase").textContent="▷ Tour da casa",et("tour").textContent="▶ Tour da obra",xe.autoRotate=!1,Po=0}et("progress").oninput=i=>{ke(),ji(i.target.value)};et("reset").onclick=()=>{ke(),ji(0),As()};let Rl=et("model").value;et("model").onchange=()=>{ke();const i={...Re};try{Re=hx(ei[et("model").value],Re),et("lot-width").value=Re.width,et("lot-depth").value=Re.depth,(Re.width!==i.width||Re.depth!==i.depth)&&(et("lot-preset").value="custom"),ki(),Rl=et("model").value,et("configuration-error").textContent=Re.width!==i.width||Re.depth!==i.depth?`Lote ajustado para ${Re.width.toLocaleString("pt-BR")} × ${Re.depth.toLocaleString("pt-BR")} m para manter a casa em escala e os afastamentos.`:""}catch(t){Re=i,et("model").value=Rl,et("configuration-error").textContent=t.message}};et("apply-lot").onclick=()=>{const i=Number(et("lot-width").value),t=Number(et("lot-depth").value);try{zr(ei[et("model").value],i,t,kn[et("model").value]),Re={width:i,depth:t},ke(),ki(),As(!0)}catch(e){et("lot-error").textContent=e.message}};et("lot-preset").onchange=i=>{if(i.target.value!=="custom"){const[t,e]=i.target.value.split(",");et("lot-width").value=t,et("lot-depth").value=e,et("apply-lot").click()}};for(const i of["lot-width","lot-depth"])et(i).oninput=()=>{et("lot-preset").value="custom"};et("dimensions").onchange=()=>{mi.visible=et("dimensions").checked};et("boundary").onchange=()=>{gs="",dc(hn)};et("light").onclick=()=>{ee.shadowMap.needsUpdate=!0,vs=!vs,xd.atmosphere(vs),et("light").setAttribute("aria-pressed",String(vs)),et("light").textContent=vs?"☀ Luz do dia":"☀ Entardecer"};et("present").onclick=()=>{Xi=!Xi,document.body.classList.toggle("presenting",Xi),et("present").setAttribute("aria-pressed",String(Xi)),et("present").textContent=Xi?"⛶ Sair da apresentação":"⛶ Apresentar",lc()};et("top").onclick=()=>{ke(),As(!0)};et("perspective").onclick=()=>{ke(),Ws(!1)};et("xray").onclick=()=>{ke(),Ws(!Vn)};et("tour").onclick=()=>{if(yi){ke();return}Be>=100&&ji(0),yi=!0,As(),xe.autoRotate=!0,xe.autoRotateSpeed=.9,et("tour").textContent="Ⅱ Pausar tour"};xe.addEventListener("start",()=>{De=null,Bn=null,(yi||fs)&&ke()});xe.addEventListener("change",Gn);for(const i of["input","change","click","pointerdown","wheel"])document.addEventListener(i,Gn,{passive:!0});document.addEventListener("visibilitychange",()=>{Io=performance.now(),document.hidden||Gn()});ki();lc();Je.position.copy(De);xe.target.copy(Bn);De=null;Bn=null;xe.update();ji(100);addEventListener("resize",lc);ee.info.autoReset=!1;function zx(i){if(Br=0,document.hidden||questMode?.active)return;const t=Math.min((i-Io)/1e3,.1);if(Io=i,yi&&(ji(Be+t*3.6),Be===100&&(Po+=t,Po>7&&ke())),fs){const s=_i;_i+=t,s<3&&_i>=3&&Ws(!0),s<11&&_i>=11&&Ws(!1),_i>17&&ke()}if(Xe+=(Number(Vn)-Xe)*(1-Math.exp(-t*2.8)),Un+=(Number(Zn)-Un)*(1-Math.exp(-t*4)),Math.abs(Number(Vn)-Xe)<.001&&(Xe=Number(Vn)),Math.abs(Number(Zn)-Un)<.001&&(Un=Number(Zn)),hn+=(Be-hn)*(1-Math.exp(-t*11)),Math.abs(Be-hn)<.005&&(hn=Be),dc(hn),De){const s=1-Math.exp(-t*2.4);Je.position.lerp(De,s),xe.target.lerp(Bn,s),$i=!0,Je.position.distanceTo(De)<.03&&(De=null,Bn=null)}const e=walkMode?.active?walkMode.update(t):xe.update(t),n=hn!==Be||Xe!==Number(Vn)||Un!==Number(Zn)||yi||fs||!!De;if(Bx&&hn===100&&!n?(Eo!==gs&&(bd(),bn=Wm(ue),Tn.add(bn),Eo=gs,ee.shadowMap.needsUpdate=!0,$i=!0),ue.visible=!1,bn.visible=!0):bn?.visible&&(bn.visible=!1,ue.visible=!0,ee.shadowMap.needsUpdate=!0,$i=!0),$i||e){ee.info.reset();const r=!!walkMode?.active||e||!!De||hn!==Be||Xe!==Number(Vn)||Un!==Number(Zn);r?ee.render(Tn,Je):Ti.render(),Sd=r?"navigation":"complete",ee.autoClear=!1,ee.render(qs,Je),ee.autoClear=!0,Hs++,Md={calls:ee.info.render.calls,triangles:ee.info.render.triangles},$i=!1}(n||e)&&Gn()}Gn();window.casaDebug=()=>({graphics:questProfile,shadows:ee.shadowMap.enabled,vr:questMode?.diagnostics,walking:!!walkMode?.active,mouseCaptured:document.pointerLockElement===ee.domElement,cameraRotation:Je.rotation.toArray(),camera:Je.position.toArray(),cameraTarget:xe.target.toArray(),performanceMode:Ad,lastRenderPath:Sd,renderedFrames:Hs,rendering:!!Br,batch:bn?.userData.stats,frame:Md,pixelRatio:ee.getPixelRatio(),resolution:[ee.domElement.width,ee.domElement.height],target:Be,current:hn,model:et("model").value,lot:ue.userData.site,facade:ue.userData.style.name,high:ue.userData.plan.high,interiorAmount:Xe,touring:yi,groups:cc.map(i=>({name:i.name,count:i.children.length,visible:i.children.filter(t=>t.visible).length})),meshes:ee.info.render.triangles});window.casaMeasure=async(i=3)=>{const t=Je.position.clone(),e=xe.target.clone(),n=performance.now(),s=Hs;xe.autoRotate=!0,xe.autoRotateSpeed=3,Gn(),await new Promise(o=>setTimeout(o,Math.min(10,Math.max(1,i))*1e3));const r=performance.now()-n,a=(Hs-s)*1e3/r;return xe.autoRotate=!1,Je.position.copy(t),xe.target.copy(e),xe.update(),Gn(),{fps:a,frames:Hs-s,elapsed:r,mode:Ad,resolution:[ee.domElement.width,ee.domElement.height]}};
+		}`};class qx extends ri{constructor(){super(),this.uniforms=ze.clone(kr.uniforms),this.material=new Hu({name:kr.name,uniforms:this.uniforms,vertexShader:kr.vertexShader,fragmentShader:kr.fragmentShader}),this._fsQuad=new Ys(this.material),this._outputColorSpace=null,this._toneMapping=null}render(t,e,n){this.uniforms.tDiffuse.value=n.texture,this.uniforms.toneMappingExposure.value=t.toneMappingExposure,(this._outputColorSpace!==t.outputColorSpace||this._toneMapping!==t.toneMapping)&&(this._outputColorSpace=t.outputColorSpace,this._toneMapping=t.toneMapping,this.material.defines={},Qt.getTransfer(this._outputColorSpace)===ne&&(this.material.defines.SRGB_TRANSFER=""),this._toneMapping===vl?this.material.defines.LINEAR_TONE_MAPPING="":this._toneMapping===Ul?this.material.defines.REINHARD_TONE_MAPPING="":this._toneMapping===Vl?this.material.defines.CINEON_TONE_MAPPING="":this._toneMapping===Vo?this.material.defines.ACES_FILMIC_TONE_MAPPING="":this._toneMapping===Hl?this.material.defines.AGX_TONE_MAPPING="":this._toneMapping===Gl?this.material.defines.NEUTRAL_TONE_MAPPING="":this._toneMapping===ql&&(this.material.defines.CUSTOM_TONE_MAPPING=""),this.material.needsUpdate=!0),this.renderToScreen===!0?(t.setRenderTarget(null),this._fsQuad.render(t)):(t.setRenderTarget(e),this.clear&&t.clear(t.autoClearColor,t.autoClearDepth,t.autoClearStencil),this._fsQuad.render(t))}dispose(){this.material.dispose(),this._fsQuad.dispose()}}let walkPhysics=null;let questMode=null;let walkMode=null;const et=i=>document.getElementById(i);await Bm();const qs=new Jo,Tn=new Jo;Tn.background=new Wt(15331050);Tn.fog=new Wr(15331050,45,100);const Je=new Qe(38,innerWidth/innerHeight,.1,500);let ee;try{ee=new Hm({canvas:et("scene"),context:questProfile.standalone?et("scene").getContext("webgl2",{xrCompatible:true,antialias:true,alpha:false,powerPreference:"high-performance"}):null,antialias:!0,powerPreference:"high-performance"})}catch(i){throw et("error").hidden=!1,et("error").textContent="Não foi possível iniciar o 3D. Ative a aceleração gráfica do navegador e recarregue.",i}ee.setPixelRatio(Math.min(devicePixelRatio,questProfile.pixelRatio));ee.shadowMap.enabled=questProfile.shadows;ee.shadowMap.autoUpdate=!1;ee.shadowMap.type=El;ee.toneMapping=Vo;ee.toneMappingExposure=1.06;ee.localClippingEnabled=!0;const xd=Px(Tn,ee),Ti=questProfile.lightweight?{setSize(){},render(){ee.render(Tn,Je)}}:new vx(ee);if(!questProfile.lightweight){Ti.addPass(new Ux(Tn,Je));const oc=new An(Tn,Je,innerWidth,innerHeight);oc.updateGtaoMaterial({radius:.55,thickness:1,distanceExponent:2,scale:1,samples:8});oc.blendIntensity=1.15;Ti.addPass(oc);const Hx=new hs(new xt(innerWidth,innerHeight),.12,.35,1.5);Ti.addPass(Hx);const Gx=new Ox;Ti.addPass(Gx);Ti.addPass(new qx);}const xe=new zm(Je,ee.domElement);xe.enableDamping=!0;xe.maxPolarAngle=Math.PI*.485;xe.minDistance=6;xe.maxDistance=110;xe.enablePan=!0;let ue,cc,mi,Be=100,hn=100,yi=!1,Vn=!1,Po=0,Re={width:12,depth:21},vs=!1,Xi=!1,Fn,Xe=0,Un=1,Zn=!0,fs=!1,_i=0;const kn=Object.fromEntries(Object.entries(ei).map(([i,t])=>[i,{facade:0,high:t.high,openingHigh:t.high,roof:"fiber",garage:!1,garageSpaces:1}])),Bx=new URLSearchParams(location.search).get("render")!=="original";let Ad="fluid",Sd="complete",gs="",Eo="",bn=null,Br=0,$i=!0,Io=performance.now(),Hs=0,Md={};function Gn(){if(questMode?.active)return;$i=!0,!Br&&!document.hidden&&(Br=requestAnimationFrame(zx))}function bd(){bn&&(Tn.remove(bn),Nm(bn),bn=null),Eo="",ue&&(ue.visible=!0)}try{const i=JSON.parse(localStorage.getItem("casa-config-v3")||"null");if(i&&ei[i.model]){zr(ei[i.model],i.lot.width,i.lot.depth),Re=i.lot,et("model").value=i.model;for(const t of Object.keys(kn))i.options?.[t]&&(kn[t]={facade:Math.max(0,Math.min(4,Number(i.options[t].facade)||0)),high:!!i.options[t].high,openingHigh:!!(i.options[t].openingHigh??i.options[t].high),roof:"fiber",garage:!!i.options[t].garage,garageSpaces:i.options[t].garageSpaces===2?2:1});et("lot-width").value=Re.width,et("lot-depth").value=Re.depth,et("lot-preset").value="custom"}}catch{}function Dx(){try{localStorage.setItem("casa-config-v3",JSON.stringify({model:et("model").value,lot:Re,options:kn}))}catch{}}let De=null,Bn=null;function As(i=!1){if(walkMode?.active||questMode?.active)return;const{plan:t,site:e}=ue.userData,n=new q(0,1,0);if(i)n.set((e.x0+e.x1)/2-t.w/2,0,-(e.z0+e.z1)/2+t.d/2),De=n.clone().add(new q(.01,Math.max(e.depth,e.width)*2.5,.01));else if(Vn){const s=t.rooms.flatMap(a=>[a[1],a[1]+a[3]]),r=t.rooms.flatMap(a=>[a[2],a[2]+a[4]]);n.set((Math.min(...s)+Math.max(...s))/2-t.w/2,0,t.d/2-(Math.min(...r)+Math.max(...r))/2),De=n.clone().add(new q(.001,Math.max(t.d,t.w)*2.65,.001))}else De=new q(t.w*.5,4.5,Math.max(16,t.d*1.55)),n.set(0,1.6,t.d*.1);Bn=n}function Va(i){i?.traverse(t=>{t.geometry?.dispose(),t.material&&(t.material.userData?.ownedTexture?.dispose(),t.material.userData?.ownedTextures?.forEach(e=>e.dispose()),t.isSprite&&t.material.map?.dispose(),t.material.dispose())})}function Cx(){const i=ue.userData.site;et("lot-area").textContent=i.area.toLocaleString("pt-BR",{maximumFractionDigits:2})+" m²",et("setbacks").textContent=`Frente: ${i.front.toLocaleString("pt-BR")} m · Esquerda: ${i.left.toLocaleString("pt-BR",{maximumFractionDigits:2})} m · Direita: ${i.right.toLocaleString("pt-BR",{maximumFractionDigits:2})} m · Fundos: ${i.rear.toLocaleString("pt-BR",{maximumFractionDigits:2})} m`,et("lot-error").textContent=""}function ki({keepView:i=!1}={}){bd();const t=xx(et("model").value,Re,kn[et("model").value]);ue&&(Tn.remove(ue),Va(ue)),mi&&(qs.remove(mi),Va(mi)),Fn&&(qs.remove(Fn),Va(Fn)),ue=t,cc=ue.userData.groups,Tn.add(ue),mi=px(ue.userData.plan,ue.userData.site),qs.add(mi),mi.visible=et("dimensions").checked,Fn=Sx(ue.userData.plan,ue.userData.site),qs.add(Fn),Fn.visible=et("house-dimensions").getAttribute("aria-pressed")==="true",xd.rebuild(ue.userData.plan,ue.userData.site),Cx(),Wx(),Dx(),gs="",i||As(),walkPhysics=createHousePhysics(ue,{Box3:si,onChange(){ee.shadowMap.needsUpdate=true;Gn()},boundaryVisible:()=>et("boundary").checked,furnitureVisible:()=>Zn}),walkMode?.refreshHouse(),dc(hn)}function lc(){if(questMode?.active)return;ee.setSize(innerWidth,innerHeight),Ti.setSize(innerWidth,innerHeight),Je.aspect=innerWidth/innerHeight,Je.setViewOffset(innerWidth,innerHeight,innerWidth>760&&!Xi?-150:0,20,innerWidth,innerHeight),walkMode?.active&&Je.clearViewOffset(),Je.updateProjectionMatrix(),Gn()}function dc(i){const t=[i.toFixed(4),Xe.toFixed(4),Un.toFixed(4),et("boundary").checked].join("|");t!==gs&&(gs=t,Gn(),cc.forEach((e,n)=>e.children.forEach((s,r)=>{let a=cx(i,n,r,e.children.length);!s.userData.keepAtFinish&&([2,3,4,5].includes(n)||n===1&&s.userData.baseY<.1)&&(a*=Math.max(0,Math.min(1,(94-i)/14)));let o=a,l=1,c=0;if([2,3,7].includes(n)&&s.isMesh){const d=s.geometry.parameters.height||0,u=s.userData.baseY-d/2;if(d){const p=Math.max(0,Math.min(d,1.15-u));l=1-Xe*(1-p/d),c=-d*(1-l)/2}}(n===6||s.userData.roofEquipment)&&(o*=1-Xe,c+=Xe*.8),s.userData.furniture&&(o*=Un,c+=(1-Un)*.35),s.userData.siteWall&&(l=1-Xe*.7,c=-(s.geometry.parameters.height||0)*(1-l)/2),s.visible=o>.002&&l>.002&&!(s.userData.siteWall&&!et("boundary").checked),s.scale.y=Math.max(.001,a*l),s.position.y=s.userData.baseY+c+(1-a)*.35,s.traverse(d=>{if(!d.isMesh)return;const u=o*(d.userData.baseOpacity??1);d.material.opacity=u,d.material.transparent=u<.999,d.material.depthWrite=u>.6,d.material.clippingPlanes=null,d.castShadow=u>.8})})),Fn.userData.rooms.visible=Xe>.85,ee.shadowMap.needsUpdate=!0)}function Wx(){const i=kn[et("model").value];et("high").checked=i.high,et("garage").checked=!!i.garage;const t=ue.userData.garage,e=!!sc(ue.userData.plan,ue.userData.site,2);et("garage-spaces").value=String(i.garageSpaces),et("garage-spaces").disabled=!i.garage,et("garage-spaces").options[1].disabled=!e,et("garage-spaces").options[1].textContent=e?"2 carros · 4,50 × 5,50 m":"2 carros · sem espaço neste lote";const n=i.garageSpaces===2?"4,50 × 5,50":"3,10 × 5,50";et("garage-status").textContent=i.garage?t.available?`Garagem de ${n} m · integrada à casa`:`A garagem de ${n} m não cabe no espaço externo disponível, mesmo sem recuo lateral.`:"",et("height-label").textContent=i.high?"3,90 m":"2,85 m",et("facade-description").textContent=ps[i.facade].description,Nx.forEach((s,r)=>s.setAttribute("aria-pressed",String(r===i.facade)))}const Nx=ps.map((i,t)=>{const e=document.createElement("button");return e.type="button",e.className="facade-choice",e.innerHTML=`<span class="facade-icon facade-${t}" style="--wall:#${i.wall.toString(16)};--accent:#${i.accent.toString(16)}"><i></i><b></b></span><span>${i.name}</span>`,e.setAttribute("aria-pressed","false"),e.onclick=()=>{ke(),kn[et("model").value].facade=t,ki()},et("facades").append(e),e});et("garage").onchange=()=>{ke(),De=null,Bn=null,kn[et("model").value].garage=et("garage").checked,ki({keepView:!0})};et("garage-spaces").onchange=()=>{ke(),De=null,Bn=null,kn[et("model").value].garageSpaces=Number(et("garage-spaces").value)===2?2:1,ki({keepView:!0})};et("high").onchange=()=>{ke(),De=null,Bn=null,kn[et("model").value].high=et("high").checked,ki({keepView:!0})};et("house-dimensions").onclick=()=>{const i=et("house-dimensions").getAttribute("aria-pressed")!=="true";et("house-dimensions").setAttribute("aria-pressed",String(i)),Fn.visible=i};et("furniture").onclick=()=>{ke(),Zn=!Zn,et("furniture").setAttribute("aria-pressed",String(Zn))};et("showcase").onclick=()=>{if(fs){ke();return}ke(),ji(100),fs=!0,_i=0,Ws(!1),et("showcase").setAttribute("aria-pressed","true"),et("showcase").textContent="Ⅱ Pausar tour da casa"};function Ws(i){Vn=i,et("xray").setAttribute("aria-pressed",String(Vn)),As()}const Yx=Xn.map((i,t)=>{const e=document.createElement("button");return e.className="step",e.innerHTML=`<b>${String(t+1).padStart(2,"0")}</b>${i[1]}`,e.onclick=()=>{ke(),ji(i[3])},et("steps").append(e),e});function ji(i){Be=Math.max(0,Math.min(100,Number(i))),et("progress").value=Be;const t=ox(Be);et("percent").innerHTML=`${Math.round(Be)}<span>%</span>`,et("stage").textContent=Xn[t][1],et("detail").textContent=Xn[t][4],et("progress").setAttribute("aria-valuetext",`${Math.round(Be)} por cento, ${Xn[t][1]}`),Yx.forEach((e,n)=>{e.classList.toggle("active",n===t),e.classList.toggle("done",Be>=Xn[n][3])})}function ke(){if(!walkMode?.settingsOpen)walkMode?.stop();yi=!1,fs=!1,et("showcase").setAttribute("aria-pressed","false"),et("showcase").textContent="▷ Tour da casa",et("tour").textContent="▶ Tour da obra",xe.autoRotate=!1,Po=0}et("progress").oninput=i=>{ke(),ji(i.target.value)};et("reset").onclick=()=>{ke(),ji(0),As()};let Rl=et("model").value;et("model").onchange=()=>{ke();const i={...Re};try{Re=hx(ei[et("model").value],Re),et("lot-width").value=Re.width,et("lot-depth").value=Re.depth,(Re.width!==i.width||Re.depth!==i.depth)&&(et("lot-preset").value="custom"),ki(),Rl=et("model").value,et("configuration-error").textContent=Re.width!==i.width||Re.depth!==i.depth?`Lote ajustado para ${Re.width.toLocaleString("pt-BR")} × ${Re.depth.toLocaleString("pt-BR")} m para manter a casa em escala e os afastamentos.`:""}catch(t){Re=i,et("model").value=Rl,et("configuration-error").textContent=t.message}};et("apply-lot").onclick=()=>{const i=Number(et("lot-width").value),t=Number(et("lot-depth").value);try{zr(ei[et("model").value],i,t,kn[et("model").value]),Re={width:i,depth:t},ke(),ki(),As(!0)}catch(e){et("lot-error").textContent=e.message}};et("lot-preset").onchange=i=>{if(i.target.value!=="custom"){const[t,e]=i.target.value.split(",");et("lot-width").value=t,et("lot-depth").value=e,et("apply-lot").click()}};for(const i of["lot-width","lot-depth"])et(i).oninput=()=>{et("lot-preset").value="custom"};et("dimensions").onchange=()=>{mi.visible=et("dimensions").checked};et("boundary").onchange=()=>{gs="",dc(hn)};et("light").onclick=()=>{ee.shadowMap.needsUpdate=!0,vs=!vs,xd.atmosphere(vs),et("light").setAttribute("aria-pressed",String(vs)),et("light").textContent=vs?"☀ Luz do dia":"☀ Entardecer"};et("present").onclick=()=>{Xi=!Xi,document.body.classList.toggle("presenting",Xi),et("present").setAttribute("aria-pressed",String(Xi)),et("present").textContent=Xi?"⛶ Sair da apresentação":"⛶ Apresentar",lc()};et("top").onclick=()=>{ke(),As(!0)};et("perspective").onclick=()=>{ke(),Ws(!1)};et("xray").onclick=()=>{ke(),Ws(!Vn)};et("tour").onclick=()=>{if(yi){ke();return}Be>=100&&ji(0),yi=!0,As(),xe.autoRotate=!0,xe.autoRotateSpeed=.9,et("tour").textContent="Ⅱ Pausar tour"};xe.addEventListener("start",()=>{De=null,Bn=null,(yi||fs)&&ke()});xe.addEventListener("change",Gn);for(const i of["input","change","click","pointerdown","wheel"])document.addEventListener(i,Gn,{passive:!0});document.addEventListener("visibilitychange",()=>{Io=performance.now(),document.hidden||Gn()});ki();lc();Je.position.copy(De);xe.target.copy(Bn);De=null;Bn=null;xe.update();ji(100);addEventListener("resize",lc);ee.info.autoReset=!1;function zx(i){if(Br=0,document.hidden||questMode?.active)return;const t=Math.min((i-Io)/1e3,.1);if(Io=i,yi&&(ji(Be+t*3.6),Be===100&&(Po+=t,Po>7&&ke())),fs){const s=_i;_i+=t,s<3&&_i>=3&&Ws(!0),s<11&&_i>=11&&Ws(!1),_i>17&&ke()}if(Xe+=(Number(Vn)-Xe)*(1-Math.exp(-t*2.8)),Un+=(Number(Zn)-Un)*(1-Math.exp(-t*4)),Math.abs(Number(Vn)-Xe)<.001&&(Xe=Number(Vn)),Math.abs(Number(Zn)-Un)<.001&&(Un=Number(Zn)),hn+=(Be-hn)*(1-Math.exp(-t*11)),Math.abs(Be-hn)<.005&&(hn=Be),dc(hn),De){const s=1-Math.exp(-t*2.4);Je.position.lerp(De,s),xe.target.lerp(Bn,s),$i=!0,Je.position.distanceTo(De)<.03&&(De=null,Bn=null)}const e=walkMode?.active?walkMode.update(t):xe.update(t),n=hn!==Be||Xe!==Number(Vn)||Un!==Number(Zn)||yi||fs||!!De;if(Bx&&hn===100&&!n?(Eo!==gs&&(bd(),bn=Wm(ue),Tn.add(bn),Eo=gs,ee.shadowMap.needsUpdate=!0,$i=!0),ue.visible=!1,bn.visible=!0):bn?.visible&&(bn.visible=!1,ue.visible=!0,ee.shadowMap.needsUpdate=!0,$i=!0),$i||e){ee.info.reset();const r=!!walkMode?.active||e||!!De||hn!==Be||Xe!==Number(Vn)||Un!==Number(Zn);r?ee.render(Tn,Je):Ti.render(),Sd=r?"navigation":"complete",ee.autoClear=!1,ee.render(qs,Je),ee.autoClear=!0,Hs++,Md={calls:ee.info.render.calls,triangles:ee.info.render.triangles},$i=!1}(n||e)&&Gn()}Gn();window.casaDebug=()=>({graphics:questProfile,shadows:ee.shadowMap.enabled,vr:questMode?.diagnostics,walking:!!walkMode?.active,mouseCaptured:document.pointerLockElement===ee.domElement,cameraRotation:Je.rotation.toArray(),camera:Je.position.toArray(),cameraTarget:xe.target.toArray(),performanceMode:Ad,lastRenderPath:Sd,renderedFrames:Hs,rendering:!!Br,batch:bn?.userData.stats,frame:Md,pixelRatio:ee.getPixelRatio(),resolution:[ee.domElement.width,ee.domElement.height],target:Be,current:hn,model:et("model").value,lot:ue.userData.site,facade:ue.userData.style.name,high:ue.userData.plan.high,interiorAmount:Xe,touring:yi,groups:cc.map(i=>({name:i.name,count:i.children.length,visible:i.children.filter(t=>t.visible).length})),meshes:ee.info.render.triangles});window.casaMeasure=async(i=3)=>{const t=Je.position.clone(),e=xe.target.clone(),n=performance.now(),s=Hs;xe.autoRotate=!0,xe.autoRotateSpeed=3,Gn(),await new Promise(o=>setTimeout(o,Math.min(10,Math.max(1,i))*1e3));const r=performance.now()-n,a=(Hs-s)*1e3/r;return xe.autoRotate=!1,Je.position.copy(t),xe.target.copy(e),xe.update(),Gn(),{fps:a,frames:Hs-s,elapsed:r,mode:Ad,resolution:[ee.domElement.width,ee.domElement.height]}};
 
 // BEGIN NAVIGATION MODULES
 // Reserve door swings and approach space before furnishing, including open passages.
@@ -5529,29 +5529,97 @@ function questSafePosition(physics,point,bounds=null) {
   return !bounds&&valid(physics.spawn.x,physics.spawn.z)?{...physics.spawn}:null;
 }
 
-// Two instanced draws per tracked hand; no downloaded models or textures.
-function createQuestHandVisual({hand,Group,InstancedMesh,SphereGeometry,CylinderGeometry,MeshBasicMaterial,Vector3}) {
+// Skin surfaces follow native joints, with a rounded palm and subtle nails.
+// Three draws per hand; no external models or textures.
+function createQuestHandVisual({hand,Group,Mesh,InstancedMesh,BufferGeometry,BufferAttribute,SphereGeometry,MeshStandardMaterial,Vector3}) {
+  const skin=new MeshStandardMaterial({color:0xd6a384,roughness:.78,metalness:0,emissive:0x352018,emissiveIntensity:.12});
+  const nailMaterial=new MeshStandardMaterial({color:0xe3bba2,roughness:.65,metalness:0});
+  const sphere=new SphereGeometry(1,20,14),palm=new InstancedMesh(sphere,skin,3),nails=new InstancedMesh(sphere,nailMaterial,5);
   const fingers=['thumb','index-finger','middle-finger','ring-finger','pinky-finger'];
-  const chains=fingers.map(f=>['wrist',f+'-metacarpal',f+'-phalanx-proximal',...(f==='thumb'?[]:[f+'-phalanx-intermediate']),f+'-phalanx-distal',f+'-tip']);
-  const names=[...new Set(chains.flat())],links=chains.flatMap(chain=>chain.slice(1).map((name,i)=>[chain[i],name]));
-  const dotsGeometry=new SphereGeometry(1,8,6),bonesGeometry=new CylinderGeometry(1,1,1,6);
-  const material=new MeshBasicMaterial({color:0xead3b9,toneMapped:false});
-  const dots=new InstancedMesh(dotsGeometry,material,names.length),bones=new InstancedMesh(bonesGeometry,material,links.length);
-  dots.frustumCulled=bones.frustumCulled=false;hand.add(dots,bones);
-  const dummy=new Group(),up=new Vector3(0,1,0),v=new Vector3();
-  function update() {
-    let count=0,boneCount=0;
-    if(hand.visible!==false) {
-      for(const name of names){const joint=hand.joints?.[name];if(!joint?.visible)continue;
-        dummy.position.copy(joint.position);dummy.quaternion.identity();dummy.scale.setScalar(Math.max(.005,joint.jointRadius||.007));dummy.updateMatrix();dots.setMatrixAt(count++,dummy.matrix);}
-      for(const [from,to] of links){const a=hand.joints?.[from],b=hand.joints?.[to];if(!a?.visible||!b?.visible)continue;
-        v.copy(b.position).sub(a.position);const length=v.length();if(length<.0001)continue;
-        dummy.position.copy(a.position).add(b.position).multiplyScalar(.5);dummy.quaternion.setFromUnitVectors(up,v.divideScalar(length));dummy.scale.set(.0045,length,.0045);dummy.updateMatrix();bones.setMatrixAt(boneCount++,dummy.matrix);}
-    }
-    dots.count=count;bones.count=boneCount;dots.instanceMatrix.needsUpdate=true;bones.instanceMatrix.needsUpdate=true;
-    return count>0;
+  const R=26,S=16,vertices=new Float32Array(5*R*S*3),indices=[];
+  const axes=['x','y','z'],circle=Array.from({length:S},(_,i)=>[Math.cos(i/S*Math.PI*2),Math.sin(i/S*Math.PI*2)]);
+  const chains=fingers.map(name=>name==='thumb'?['thumb-metacarpal','thumb-phalanx-proximal','thumb-phalanx-distal','thumb-tip']:[name+'-phalanx-proximal',name+'-phalanx-intermediate',name+'-phalanx-distal',name+'-tip']);
+  for(let f=0;f<5;f++)for(let r=0;r<R-1;r++)for(let s=0;s<S;s++){
+    const i=f*R*S+r*S+s,j=f*R*S+r*S+(s+1)%S;indices.push(i,i+S,j,j,i+S,j+S);
   }
-  return {update,dispose(){hand.remove(dots,bones);dots.dispose();bones.dispose();dotsGeometry.dispose();bonesGeometry.dispose();material.dispose();}};
+  const geometry=new BufferGeometry();geometry.setAttribute('position',new BufferAttribute(vertices,3));geometry.setIndex(indices);
+  const positions=geometry.attributes.position.array;
+  const surface=new Mesh(geometry,skin);surface.frustumCulled=palm.frustumCulled=nails.frustumCulled=false;hand.add(surface,palm,nails);
+  const dummy=new Group(),side=new Vector3(),normal=new Vector3(),long=new Vector3(),center=new Vector3(),tangent=new Vector3(),radial=new Vector3();
+  const frame=new Group(),ringNormal=new Vector3(),points=Array.from({length:4},()=>new Vector3()),radii=new Array(4);
+  let handedness=hand.userData?.handedness||'right';
+  const connected=event=>{handedness=event.data?.handedness||handedness;};hand.addEventListener('connected',connected);
+  function joint(name){const p=hand.joints?.[name];return p?.visible?p:null;}
+  function volume(index,position,width,length,depth){dummy.position.copy(position);dummy.quaternion.copy(frame.quaternion);dummy.scale.set(width,length,depth);dummy.updateMatrix();palm.setMatrixAt(index,dummy.matrix);}
+  function curve(t,out) {
+    const u=t*3,i=Math.min(2,Math.floor(u)),s=u-i,s2=s*s,s3=s2*s;
+    const p0=points[Math.max(0,i-1)],p1=points[i],p2=points[i+1],p3=points[Math.min(3,i+2)];
+    for(const axis of axes)out[axis]=.5*((2*p1[axis])+(-p0[axis]+p2[axis])*s+(2*p0[axis]-5*p1[axis]+4*p2[axis]-p3[axis])*s2+(-p0[axis]+3*p1[axis]-3*p2[axis]+p3[axis])*s3);
+  }
+  function update() {
+    const wrist=joint('wrist'),middle=joint('middle-finger-phalanx-proximal'),index=joint('index-finger-phalanx-proximal'),pinky=joint('pinky-finger-phalanx-proximal');
+    const tracked=hand.visible!==false&&wrist&&middle&&index&&pinky;
+    surface.visible=palm.visible=nails.visible=!!tracked;if(!tracked){palm.count=nails.count=0;return false;}
+    long.copy(middle.position).sub(wrist.position);const length=long.length();long.normalize();
+    side.copy(index.position).sub(pinky.position);const width=side.length();side.normalize();
+    normal.crossVectors(side,long).normalize();if(handedness==='right')normal.negate();side.crossVectors(long,normal).normalize();
+    frame.matrix.makeBasis(side,long,normal);frame.quaternion.setFromRotationMatrix(frame.matrix);
+    center.copy(wrist.position).lerp(middle.position,.54);volume(0,center,width*.69,length*.57,Math.max(.013,width*.22));
+    center.copy(wrist.position).lerp(middle.position,.06);volume(1,center,width*.42,length*.28,Math.max(.012,width*.20));
+    const thumbBase=joint('thumb-metacarpal');
+    if(thumbBase){center.copy(wrist.position).lerp(thumbBase.position,.65).lerp(middle.position,.2);volume(2,center,width*.32,length*.39,width*.24);palm.count=3;}else palm.count=2;
+    let nailCount=0;
+    for(let f=0;f<5;f++) {
+      const name=fingers[f],names=chains[f];
+      const joints=names.map(joint),valid=joints.every(Boolean);
+      if(valid)for(let i=0;i<4;i++){points[i].copy(joints[i].position);radii[i]=Math.max(.005,Math.min(.014,joints[i].jointRadius||.008))*(i===0?1.15:1.05);}
+      if(valid&&name!=='thumb')points[0].lerp(wrist.position,.13);
+      for(let r=0;r<R;r++) {
+        const t=r/(R-1);if(valid){curve(t,center);curve(Math.min(1,t+.005),tangent);if(t===1){curve(t-.005,tangent);tangent.sub(center).negate();}else tangent.sub(center);tangent.normalize();radial.crossVectors(tangent,normal);if(radial.lengthSq()<1e-8)radial.crossVectors(tangent,side);radial.normalize();ringNormal.crossVectors(radial,tangent).normalize();}
+        const u=t*3,i=Math.min(2,Math.floor(u)),radius=valid?(radii[i]+(radii[i+1]-radii[i])*(u-i))*(t>.88?Math.sqrt(Math.max(0,1-((t-.88)/.12)**2)):1):0;
+        for(let s=0;s<S;s++){const k=(f*R*S+r*S+s)*3,c=circle[s][0]*radius,n=circle[s][1]*radius;
+          positions[k]=valid?center.x+c*radial.x+n*ringNormal.x:wrist.position.x;
+          positions[k+1]=valid?center.y+c*radial.y+n*ringNormal.y:wrist.position.y;
+          positions[k+2]=valid?center.z+c*radial.z+n*ringNormal.z:wrist.position.z;
+        }
+      }
+      if(valid){dummy.position.copy(points[2]).lerp(points[3],.58).addScaledVector(ringNormal,radii[3]*.83);dummy.matrix.makeBasis(radial,tangent,ringNormal);dummy.quaternion.setFromRotationMatrix(dummy.matrix);dummy.scale.set(radii[3]*.68,points[2].distanceTo(points[3])*.28,.0012);dummy.updateMatrix();nails.setMatrixAt(nailCount++,dummy.matrix);}
+    }
+    geometry.attributes.position.needsUpdate=true;geometry.computeVertexNormals();palm.instanceMatrix.needsUpdate=nails.instanceMatrix.needsUpdate=true;nails.count=nailCount;return true;
+  }
+  return {update,dispose(){hand.removeEventListener('connected',connected);hand.remove(surface,palm,nails);palm.dispose();nails.dispose();geometry.dispose();sphere.dispose();skin.dispose();nailMaterial.dispose();}};
+}
+
+// Deliberate forward pointing drives the same collision-aware movement as Touch.
+function createQuestHandWalk({Vector3,speed=1}) {
+  const tip=new Vector3(),base=new Vector3(),thumb=new Vector3(),wrist=new Vector3(),a=new Vector3(),b=new Vector3();
+  const direction=new Vector3(),smooth=new Vector3();let held=0,selected=null,active=false;
+  function reset(){held=0;selected=null;active=false;smooth.set(0,0,0);}
+  function point(hand,name,out){const joint=hand.joints?.[name];if(!joint?.visible)return false;joint.getWorldPosition(out);return true;}
+  function update({hands,head,delta,blocked=false,scale=1}) {
+    if(blocked){reset();return {x:0,z:0,active:false};}
+    let chosen=null;
+    for(const hand of hands) {
+      if(hand.visible===false||!point(hand,'wrist',wrist)||!point(hand,'index-finger-phalanx-proximal',base)||!point(hand,'index-finger-tip',tip)||!point(hand,'thumb-tip',thumb))continue;
+      if(tip.distanceTo(thumb)/scale<.04)continue;
+      let length=0,previous=base,valid=true;
+      for(const name of ['index-finger-phalanx-intermediate','index-finger-phalanx-distal','index-finger-tip']){
+        if(!point(hand,name,a)){valid=false;break;}length+=previous.distanceTo(a);b.copy(a);previous=b;
+      }
+      if(!valid||length<.02*scale||base.distanceTo(tip)/length<.9)continue;
+      direction.copy(tip).sub(base);const full=direction.length();if(Math.abs(direction.y)>full*.55)continue;
+      direction.y=0;direction.normalize();
+      const dx=(wrist.x-head.x)/scale,dz=(wrist.z-head.z)/scale,distance=Math.hypot(dx,dz);
+      if(distance<.23||distance>.9||(dx*direction.x+dz*direction.z)/distance<.55)continue;
+      chosen=hand;break;
+    }
+    if(!chosen){reset();return {x:0,z:0,active:false};}
+    if(selected!==chosen){reset();selected=chosen;smooth.copy(direction);}
+    held+=Math.min(delta,.05);smooth.lerp(direction,1-Math.exp(-delta*12)).normalize();
+    const amount=Math.min(1,Math.max(0,(held-.3)/.3))*speed;active=amount>0;
+    return {x:smooth.x*amount,z:smooth.z*amount,active};
+  }
+  return {update,reset,get active(){return active;}};
 }
 
 // WebXR uses the same house geometry, doors and collision world as the desktop tour.
@@ -5566,6 +5634,9 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   const rayControllers = [];
   const handVisuals=[],pointers=[];
   let panel=null,openPanelNextFrame=false,menuPressed=false,floorLevel=0,amplitude=1;
+  let exitHeldSince=null,exitTimer=null,ending=false,frameError=null,frames=0;
+  const handWalk=typeof createQuestHandWalk==='function'?createQuestHandWalk({Vector3}):null;
+  let handPauseUntil=0;
   renderer.xr.enabled = true;
   renderer.xr.setReferenceSpaceType('local-floor');
   renderer.xr.setFramebufferScaleFactor(0.8);
@@ -5594,6 +5665,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     active = false;
     pending = false;
     renderer.setAnimationLoop(null);
+    handWalk?.reset();
+    if(exitTimer!==null)globalThis.clearInterval?.(exitTimer);exitTimer=null;exitHeldSince=null;ending=false;
     panel?.dispose();panel=null;
     for(const item of handVisuals){item.visual.dispose();rig.remove(item.hand);}handVisuals.length=0;
     for(const pointer of pointers)pointer?.dispose();pointers.length=0;
@@ -5624,14 +5697,31 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     return getPhysics().interact(head, direction);
   }
   function interact(event) {
-    if(!active||curtain?.visible)return;
+    if(!active)return;
+    handWalk?.reset();handPauseUntil=(globalThis.performance?.now?.()||0)+600;
+    // Recovery and exit must remain usable even when the head touches a wall.
     if(event?.target&&panel?.select(event.target))return;
+    if(curtain?.visible)return;
     if(event?.target&&getPhysics().interactRay) {
       event.target.updateWorldMatrix(true,false);
       rayOrigin.setFromMatrixPosition(event.target.matrixWorld);
       rayDirection.set(0,0,-1).transformDirection(event.target.matrixWorld);
       getPhysics().interactRay(rayOrigin,rayDirection);
     } else doorInteraction();
+  }
+  async function exitVR() {
+    if(!session||ending)return;
+    ending=true;
+    try {await session.end();}
+    catch(error){ending=false;status.textContent='Não foi possível encerrar. Abra o menu Meta para sair da experiência.';}
+  }
+  function checkExit(now) {
+    if(!active||ending)return ending;
+    const held=Array.from(session.inputSources).some(input=>!input.hand&&input.gamepad?.buttons?.[5]?.pressed);
+    if(!held){exitHeldSince=null;return false;}
+    if(exitHeldSince===null)exitHeldSince=now;
+    if(now-exitHeldSince>=1500){void exitVR();return true;}
+    return false;
   }
   function putVisitorAt(point) {
     const physics=getPhysics();camera.getWorldPosition(head);
@@ -5664,8 +5754,15 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     putVisitorAt(safe);return 'Você está em '+destination.name+'.';
   }
 
-  function frame(time) {
+  function frame(time,xrFrame) {
     if (!active || !renderer.xr.isPresenting) return;
+    if(checkExit(time))return;
+    // A session may deliver frames before tracking is ready. Never calibrate from
+    // the desktop/empty XR camera: that shifts the visitor into walls when tracking starts.
+    if(xrFrame&&renderer.xr.getReferenceSpace) {
+      const reference=renderer.xr.getReferenceSpace();
+      if(!reference||!xrFrame.getViewerPose(reference)){lastTime=null;handWalk?.reset();return;}
+    }
     const delta = lastTime === null ? 0 : Math.min((time - lastTime) / 1000, 0.05);
     lastTime = time;
     rig.updateMatrixWorld(true);
@@ -5698,6 +5795,11 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     }
     if(menuDown&&!menuPressed&&panel){if(panel.visible)panel.close();else panel.open(head,direction);}menuPressed=menuDown;
     if(panel?.visible)forward=right=turn=0;
+    rig.updateMatrixWorld(true);
+    const trackedHands=handVisuals.filter(item=>item.visual.update()).map(item=>item.hand);
+    const handMotion=handWalk?.update({hands:trackedHands,head,delta,scale:rig.scale.x,
+      blocked:!!panel?.visible||curtain.visible||time<handPauseUntil||Math.abs(forward)>.18||Math.abs(right)>.18||
+        !Array.from(session.inputSources).some(input=>input.hand)||rayControllers.some(controller=>!!panel?.hit?.(controller))})||{x:0,z:0};
     if (!curtain.visible) {
       const length = Math.hypot(direction.x,direction.z) || 1;
       const fx = direction.x/length, fz = direction.z/length;
@@ -5705,7 +5807,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       if (Math.abs(right)<0.18) right=0;
       const inputLength = Math.max(1,Math.hypot(forward,right)), step=1.5*delta/inputLength;
       const body = {x:head.x,y:floorLevel+physics.eyeHeight,z:head.z};
-      physics.move(body,(fx*forward-fz*right)*step,(fz*forward+fx*right)*step,delta);
+      physics.move(body,(fx*forward-fz*right)*step+handMotion.x*delta,(fz*forward+fx*right)*step+handMotion.z*delta,delta);
       rig.position.x += body.x-head.x; rig.position.z += body.z-head.z;
       const nextFloor=body.y-physics.eyeHeight;rig.position.y+=nextFloor-floorLevel;floorLevel=nextFloor;
       if (Math.abs(turn)<0.25) snapReady=true;
@@ -5722,9 +5824,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       physics.update(delta,lastSafeHead);
     }
     rig.updateMatrixWorld(true);
-    let visibleHands=false;for(const item of handVisuals)visibleHands=item.visual.update()||visibleHands;
-    const handFeature=session.enabledFeatures?.includes('hand-tracking');
-    const hint=visibleHands?'Mãos ativas: aponte e junte polegar e indicador.':handFeature?'Apoie os controles para usar as mãos, ou use o gatilho.':'Use o gatilho. Mãos dependem do suporte desta conexão.';
+    const visibleHands=trackedHands.length>0;
+    const hint=curtain.visible?'Próximo de uma parede. Volte um passo ou segure B/Y para sair.':visibleHands?'Para andar: feche o painel e aponte a mão à frente. Pinça: escolher.':'Gatilho: escolher · B/Y: painel · Segure B/Y por 1,5 s: sair';
     const hits=panel?.update(rayControllers,hint)||[];
     pointers.forEach((pointer,i)=>{
       const controller=rayControllers[i];rayOrigin.setFromMatrixPosition(controller.matrixWorld);
@@ -5734,11 +5835,20 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     });
     renderer.info.reset();
     renderer.render(scene,camera);
+    frames++;
+  }
+  function safeFrame(time,xrFrame) {
+    try {frame(time,xrFrame);}
+    catch(error) {
+      frameError=error?.message||String(error);console.error('Casas 3D VR:',error);
+      // A frame failure must return to the browser instead of trapping a black session.
+      void exitVR().then(()=>{status.textContent='O passeio foi interrompido. Recarregue a página e entre novamente em VR.';});
+    }
   }
 
   async function enter() {
     if (pending) return;
-    if (active) { await session.end(); return; }
+    if (active) { await exitVR(); return; }
     if (!navigator.xr || !window.isSecureContext) {
       status.textContent = airLink
         ? 'Feche esta janela e use o atalho Abrir Meta Quest sem fio no notebook, com o Air Link conectado nos óculos.'
@@ -5760,7 +5870,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       rig=new Group(); scene.add(rig); rig.add(camera);
       const p=getPhysics(), spawn=p.spawn;
       rig.position.set(spawn.x,p.floorAt(spawn.x,spawn.z),spawn.z);
-      floorLevel=p.floorAt(spawn.x,spawn.z);amplitude=1;menuPressed=false;
+      floorLevel=p.floorAt(spawn.x,spawn.z);amplitude=1;menuPressed=false;exitHeldSince=null;ending=false;frameError=null;frames=0;
+      handWalk?.reset();handPauseUntil=0;
       camera.position.set(0,0,0); camera.rotation.set(0,0,0); camera.clearViewOffset();
       curtain=makeCurtain(); curtain.visible=false; camera.add(curtain);
       renderer.shadowMap.enabled=false;
@@ -5769,7 +5880,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
         pointers.push(createPointer?.(controller));
         if(createHand&&renderer.xr.getHand){const hand=renderer.xr.getHand(i);rig.add(hand);handVisuals.push({hand,visual:createHand(hand)});}
       }
-      panel=createPanel?.({scene,camera,getState:()=>({...getConfiguration(),amplitude}),change:applyConfiguration,navigate,door:doorInteraction,exitVR:()=>session?.end()});
+      panel=createPanel?.({scene,camera,getState:()=>({...getConfiguration(),amplitude}),change:applyConfiguration,navigate,door:doorInteraction,exitVR});
       openPanelNextFrame=!!panel;
       session.addEventListener('end',finish,{once:true});
       lastTime=null; lastSafeHead=null; active=true;
@@ -5781,7 +5892,9 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       if(typeof questProfile!=='undefined'&&questProfile.lightweight&&session.supportedFrameRates?.includes(72)) {
         try { await session.updateTargetFrameRate(72); } catch { /* Runtime keeps its supported default. */ }
       }
-      renderer.setAnimationLoop(frame);
+      if(!active)return;
+      renderer.setAnimationLoop(safeFrame);
+      exitTimer=globalThis.setInterval?.(()=>checkExit(performance.now()),100)??null;
       pending=false; button.disabled=false; button.textContent='Sair do VR';
       status.textContent='Minha casa: opções dentro dos óculos · Gatilho ou pinça: escolher · B/Y: painel · Analógicos: andar e girar';
     } catch(error) {
@@ -5810,7 +5923,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     window.addEventListener?.('focus',checkConnection);
     checkConnection();
   }
-  return {get active(){return active;},get diagnostics(){return {active,amplitude,panelOpen:!!panel?.visible,handFeature:session?.enabledFeatures?.includes('hand-tracking')??null,handInputs:Array.from(session?.inputSources||[]).filter(input=>input.hand).length};},enter,checkConnection,end:()=>session?.end()};
+  return {get active(){return active;},get diagnostics(){return {active,amplitude,frames,frameError,handWalking:!!handWalk?.active,wallProtection:!!curtain?.visible,head:[head.x,head.y,head.z],panelOpen:!!panel?.visible,handFeature:session?.enabledFeatures?.includes('hand-tracking')??null,handInputs:Array.from(session?.inputSources||[]).filter(input=>input.hand).length};},enter,checkConnection,end:exitVR};
 }
 
 walkMode=createWalkCamera({camera:Je,controls:xe,canvas:ee.domElement,stopTour:ke,finishHouse(){ji(100);hn=100;Vn=false;Xe=0;et("xray").setAttribute("aria-pressed","false");De=null;Bn=null;dc(100);},resize:lc,invalidate:Gn,getPlan:()=>ue.userData.plan,getPhysics:()=>walkPhysics});
@@ -5847,16 +5960,16 @@ function questChangeConfiguration(key,value) {
 }
 questMode=createQuestVR({renderer:ee,scene:Tn,camera:Je,controls:xe,Group:Ce,Vector3:q,
   getConfiguration:questConfiguration,changeConfiguration:questChangeConfiguration,
-  createPanel(options){return createQuestPanel({...options,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:Gr,Vector3:q});},
-  createHand(hand){return createQuestHandVisual({hand,Group:Ce,InstancedMesh:vu,SphereGeometry:_o,CylinderGeometry:ti,MeshBasicMaterial:Gr,Vector3:q});},
+  createPanel(options){return createQuestPanel({...options,Group:Ce,Mesh:Zt,PlaneGeometry:Ns,CanvasTexture:rd,MeshBasicMaterial:zo,Vector3:q});},
+  createHand(hand){return createQuestHandVisual({hand,Group:Ce,Mesh:Zt,InstancedMesh:vu,BufferGeometry:je,BufferAttribute:me,SphereGeometry:_o,MeshStandardMaterial:Gr,Vector3:q});},
   createPointer(controller){
-    const material=new Gr({color:0x78af87,depthTest:false,depthWrite:false,toneMapped:false});
+    const material=new zo({color:0x78af87,depthTest:false,depthWrite:false,toneMapped:false});
     const beam=new Zt(new ti(.0015,.0015,1,6),material),dot=new Zt(new _o(.006,8,6),material);
     beam.rotation.x=Math.PI/2;beam.renderOrder=1002;dot.renderOrder=1003;controller.add(beam,dot);
     return {update(hit,scale){const distance=(hit?.distance||.65)*scale;beam.scale.y=distance;beam.position.z=-distance/2;dot.position.z=-distance;dot.visible=!!hit;material.color.set(hit?.button&&!hit.button.disabled?0xf0bf67:0x78af87);},
       dispose(){controller.remove(beam,dot);beam.geometry.dispose();dot.geometry.dispose();material.dispose();}};
   },
-  makeCurtain(){const mesh=new Zt(new Ns(4,4),new Gr({color:0,depthTest:false,depthWrite:false}));mesh.position.z=-0.2;mesh.renderOrder=9999;mesh.frustumCulled=false;return mesh;},
+  makeCurtain(){const mesh=new Zt(new Ns(4,4),new zo({color:0,depthTest:false,depthWrite:false}));mesh.position.z=-0.2;mesh.renderOrder=9999;mesh.frustumCulled=false;return mesh;},
   prepare(){
     walkMode.stop();ke();ji(100);hn=100;Vn=false;Xe=0;Un=Number(Zn);De=null;Bn=null;dc(100);
     et('xray').setAttribute('aria-pressed','false');

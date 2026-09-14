@@ -60,7 +60,7 @@ if (!html.includes('if(walkMode?.active||questMode?.active)return;')) {
   replaceOnce('function As(i=!1){if(walkMode?.active)return;', 'function As(i=!1){if(walkMode?.active||questMode?.active)return;');
   replaceOnce('function lc(){ee.setSize', 'function lc(){if(questMode?.active)return;ee.setSize');
 }
-parts.push('quest-panel.js','quest-hands.js');
+parts.push('quest-panel.js','quest-hands.js','quest-hand-walk.js');
 if(!html.includes('vr:questMode?.diagnostics'))replaceOnce('window.casaDebug=()=>({walking:', 'window.casaDebug=()=>({vr:questMode?.diagnostics,walking:');
 const start = html.indexOf('// BEGIN NAVIGATION MODULES');
 const end = html.indexOf('</script>', start >= 0 ? start : oldStart);

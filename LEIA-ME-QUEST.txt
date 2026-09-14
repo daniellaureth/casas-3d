@@ -9,6 +9,10 @@ Escolha planta e fachada e toque em "Entrar em VR".
 Analogico esquerdo: andar. Direito: girar em passos de 30 graus.
 Aponte o controle para a porta e aperte o gatilho para abrir ou fechar.
 B/Y ou "Minha casa": mudar as opcoes durante a visita.
+Segure B ou Y por 1,5 segundo para sair mesmo se o apontamento falhar.
+Sem controles: feche o painel e estenda a mao, com o indicador apontando
+para frente. A caminhada segue a direcao do dedo. Recolha a mao, dobre
+o indicador ou faca pinca para parar. Pinca continua selecionando as opcoes.
 "Sair do VR" encerra a sessao. Nao precisa de cabo, Air Link ou servidor local.
 
 As atualizacoes enviadas para a branch main do repositorio casas-3d sao

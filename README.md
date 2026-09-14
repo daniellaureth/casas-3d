@@ -10,8 +10,14 @@ Air Link, Link, servidor local ou assinatura depois da publicação.
 - Analógico esquerdo: andar; direito: girar 30° por toque.
 - Gatilho: apontar e escolher opções ou abrir/fechar a porta apontada, até 2,5 m.
 - B/Y ou botão flutuante Minha casa: opções durante a visita.
+- Segure B ou Y por 1,5 segundo para sair, mesmo se o apontamento não responder.
 - Fechar: continuar andando. Sair do VR: encerrar a sessão.
 - Rastreamento das mãos é opcional; os controles Touch continuam disponíveis.
+- Sem controles: feche o painel, estenda uma mão à frente e mantenha o indicador
+  apontando na direção desejada. A caminhada começa suavemente. Recolha a mão,
+  dobre o indicador ou faça pinça para parar. A pinça continua selecionando opções
+  e portas. Colisões permanecem ativas e o painel aberto pausa a caminhada.
+- As mãos têm superfícies de pele, palma arredondada e unhas, geradas localmente.
 - Normal mantém a escala real. Ampla/Muito ampla alteram a percepção do espaço.
 
 ## Atualizar

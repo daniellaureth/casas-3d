@@ -10,6 +10,9 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   const rayControllers = [];
   const handVisuals=[],pointers=[];
   let panel=null,openPanelNextFrame=false,menuPressed=false,floorLevel=0,amplitude=1;
+  let exitHeldSince=null,exitTimer=null,ending=false,frameError=null,frames=0;
+  const handWalk=typeof createQuestHandWalk==='function'?createQuestHandWalk({Vector3}):null;
+  let handPauseUntil=0;
   renderer.xr.enabled = true;
   renderer.xr.setReferenceSpaceType('local-floor');
   renderer.xr.setFramebufferScaleFactor(0.8);
@@ -38,6 +41,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     active = false;
     pending = false;
     renderer.setAnimationLoop(null);
+    handWalk?.reset();
+    if(exitTimer!==null)globalThis.clearInterval?.(exitTimer);exitTimer=null;exitHeldSince=null;ending=false;
     panel?.dispose();panel=null;
     for(const item of handVisuals){item.visual.dispose();rig.remove(item.hand);}handVisuals.length=0;
     for(const pointer of pointers)pointer?.dispose();pointers.length=0;
@@ -68,14 +73,31 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     return getPhysics().interact(head, direction);
   }
   function interact(event) {
-    if(!active||curtain?.visible)return;
+    if(!active)return;
+    handWalk?.reset();handPauseUntil=(globalThis.performance?.now?.()||0)+600;
+    // Recovery and exit must remain usable even when the head touches a wall.
     if(event?.target&&panel?.select(event.target))return;
+    if(curtain?.visible)return;
     if(event?.target&&getPhysics().interactRay) {
       event.target.updateWorldMatrix(true,false);
       rayOrigin.setFromMatrixPosition(event.target.matrixWorld);
       rayDirection.set(0,0,-1).transformDirection(event.target.matrixWorld);
       getPhysics().interactRay(rayOrigin,rayDirection);
     } else doorInteraction();
+  }
+  async function exitVR() {
+    if(!session||ending)return;
+    ending=true;
+    try {await session.end();}
+    catch(error){ending=false;status.textContent='Não foi possível encerrar. Abra o menu Meta para sair da experiência.';}
+  }
+  function checkExit(now) {
+    if(!active||ending)return ending;
+    const held=Array.from(session.inputSources).some(input=>!input.hand&&input.gamepad?.buttons?.[5]?.pressed);
+    if(!held){exitHeldSince=null;return false;}
+    if(exitHeldSince===null)exitHeldSince=now;
+    if(now-exitHeldSince>=1500){void exitVR();return true;}
+    return false;
   }
   function putVisitorAt(point) {
     const physics=getPhysics();camera.getWorldPosition(head);
@@ -108,8 +130,15 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     putVisitorAt(safe);return 'Você está em '+destination.name+'.';
   }
 
-  function frame(time) {
+  function frame(time,xrFrame) {
     if (!active || !renderer.xr.isPresenting) return;
+    if(checkExit(time))return;
+    // A session may deliver frames before tracking is ready. Never calibrate from
+    // the desktop/empty XR camera: that shifts the visitor into walls when tracking starts.
+    if(xrFrame&&renderer.xr.getReferenceSpace) {
+      const reference=renderer.xr.getReferenceSpace();
+      if(!reference||!xrFrame.getViewerPose(reference)){lastTime=null;handWalk?.reset();return;}
+    }
     const delta = lastTime === null ? 0 : Math.min((time - lastTime) / 1000, 0.05);
     lastTime = time;
     rig.updateMatrixWorld(true);
@@ -142,6 +171,11 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     }
     if(menuDown&&!menuPressed&&panel){if(panel.visible)panel.close();else panel.open(head,direction);}menuPressed=menuDown;
     if(panel?.visible)forward=right=turn=0;
+    rig.updateMatrixWorld(true);
+    const trackedHands=handVisuals.filter(item=>item.visual.update()).map(item=>item.hand);
+    const handMotion=handWalk?.update({hands:trackedHands,head,delta,scale:rig.scale.x,
+      blocked:!!panel?.visible||curtain.visible||time<handPauseUntil||Math.abs(forward)>.18||Math.abs(right)>.18||
+        !Array.from(session.inputSources).some(input=>input.hand)||rayControllers.some(controller=>!!panel?.hit?.(controller))})||{x:0,z:0};
     if (!curtain.visible) {
       const length = Math.hypot(direction.x,direction.z) || 1;
       const fx = direction.x/length, fz = direction.z/length;
@@ -149,7 +183,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       if (Math.abs(right)<0.18) right=0;
       const inputLength = Math.max(1,Math.hypot(forward,right)), step=1.5*delta/inputLength;
       const body = {x:head.x,y:floorLevel+physics.eyeHeight,z:head.z};
-      physics.move(body,(fx*forward-fz*right)*step,(fz*forward+fx*right)*step,delta);
+      physics.move(body,(fx*forward-fz*right)*step+handMotion.x*delta,(fz*forward+fx*right)*step+handMotion.z*delta,delta);
       rig.position.x += body.x-head.x; rig.position.z += body.z-head.z;
       const nextFloor=body.y-physics.eyeHeight;rig.position.y+=nextFloor-floorLevel;floorLevel=nextFloor;
       if (Math.abs(turn)<0.25) snapReady=true;
@@ -166,9 +200,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       physics.update(delta,lastSafeHead);
     }
     rig.updateMatrixWorld(true);
-    let visibleHands=false;for(const item of handVisuals)visibleHands=item.visual.update()||visibleHands;
-    const handFeature=session.enabledFeatures?.includes('hand-tracking');
-    const hint=visibleHands?'Mãos ativas: aponte e junte polegar e indicador.':handFeature?'Apoie os controles para usar as mãos, ou use o gatilho.':'Use o gatilho. Mãos dependem do suporte desta conexão.';
+    const visibleHands=trackedHands.length>0;
+    const hint=curtain.visible?'Próximo de uma parede. Volte um passo ou segure B/Y para sair.':visibleHands?'Para andar: feche o painel e aponte a mão à frente. Pinça: escolher.':'Gatilho: escolher · B/Y: painel · Segure B/Y por 1,5 s: sair';
     const hits=panel?.update(rayControllers,hint)||[];
     pointers.forEach((pointer,i)=>{
       const controller=rayControllers[i];rayOrigin.setFromMatrixPosition(controller.matrixWorld);
@@ -178,11 +211,20 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     });
     renderer.info.reset();
     renderer.render(scene,camera);
+    frames++;
+  }
+  function safeFrame(time,xrFrame) {
+    try {frame(time,xrFrame);}
+    catch(error) {
+      frameError=error?.message||String(error);console.error('Casas 3D VR:',error);
+      // A frame failure must return to the browser instead of trapping a black session.
+      void exitVR().then(()=>{status.textContent='O passeio foi interrompido. Recarregue a página e entre novamente em VR.';});
+    }
   }
 
   async function enter() {
     if (pending) return;
-    if (active) { await session.end(); return; }
+    if (active) { await exitVR(); return; }
     if (!navigator.xr || !window.isSecureContext) {
       status.textContent = airLink
         ? 'Feche esta janela e use o atalho Abrir Meta Quest sem fio no notebook, com o Air Link conectado nos óculos.'
@@ -204,7 +246,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       rig=new Group(); scene.add(rig); rig.add(camera);
       const p=getPhysics(), spawn=p.spawn;
       rig.position.set(spawn.x,p.floorAt(spawn.x,spawn.z),spawn.z);
-      floorLevel=p.floorAt(spawn.x,spawn.z);amplitude=1;menuPressed=false;
+      floorLevel=p.floorAt(spawn.x,spawn.z);amplitude=1;menuPressed=false;exitHeldSince=null;ending=false;frameError=null;frames=0;
+      handWalk?.reset();handPauseUntil=0;
       camera.position.set(0,0,0); camera.rotation.set(0,0,0); camera.clearViewOffset();
       curtain=makeCurtain(); curtain.visible=false; camera.add(curtain);
       renderer.shadowMap.enabled=false;
@@ -213,7 +256,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
         pointers.push(createPointer?.(controller));
         if(createHand&&renderer.xr.getHand){const hand=renderer.xr.getHand(i);rig.add(hand);handVisuals.push({hand,visual:createHand(hand)});}
       }
-      panel=createPanel?.({scene,camera,getState:()=>({...getConfiguration(),amplitude}),change:applyConfiguration,navigate,door:doorInteraction,exitVR:()=>session?.end()});
+      panel=createPanel?.({scene,camera,getState:()=>({...getConfiguration(),amplitude}),change:applyConfiguration,navigate,door:doorInteraction,exitVR});
       openPanelNextFrame=!!panel;
       session.addEventListener('end',finish,{once:true});
       lastTime=null; lastSafeHead=null; active=true;
@@ -225,7 +268,9 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       if(typeof questProfile!=='undefined'&&questProfile.lightweight&&session.supportedFrameRates?.includes(72)) {
         try { await session.updateTargetFrameRate(72); } catch { /* Runtime keeps its supported default. */ }
       }
-      renderer.setAnimationLoop(frame);
+      if(!active)return;
+      renderer.setAnimationLoop(safeFrame);
+      exitTimer=globalThis.setInterval?.(()=>checkExit(performance.now()),100)??null;
       pending=false; button.disabled=false; button.textContent='Sair do VR';
       status.textContent='Minha casa: opções dentro dos óculos · Gatilho ou pinça: escolher · B/Y: painel · Analógicos: andar e girar';
     } catch(error) {
@@ -254,5 +299,5 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     window.addEventListener?.('focus',checkConnection);
     checkConnection();
   }
-  return {get active(){return active;},get diagnostics(){return {active,amplitude,panelOpen:!!panel?.visible,handFeature:session?.enabledFeatures?.includes('hand-tracking')??null,handInputs:Array.from(session?.inputSources||[]).filter(input=>input.hand).length};},enter,checkConnection,end:()=>session?.end()};
+  return {get active(){return active;},get diagnostics(){return {active,amplitude,frames,frameError,handWalking:!!handWalk?.active,wallProtection:!!curtain?.visible,head:[head.x,head.y,head.z],panelOpen:!!panel?.visible,handFeature:session?.enabledFeatures?.includes('hand-tracking')??null,handInputs:Array.from(session?.inputSources||[]).filter(input=>input.hand).length};},enter,checkConnection,end:exitVR};
 }
