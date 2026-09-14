@@ -76,6 +76,15 @@ test('safe destinations respect room bounds and avoid new furniture and walls',(
   const p=context.api.questSafePosition(physics,{x:0,z:0},bounds);assert.ok(p);assert.equal(physics.blocked(p.x,p.z),false);assert.ok(Math.abs(p.x)<=.8&&Math.abs(p.z)<=.8);
   assert.equal(context.api.questSafePosition({...physics,blocked:()=>true},{x:0,z:0},bounds),null);
 });
+test('a pinch stays attached to Continue even if its release ray drifts onto Pause',()=>{
+ const f=panelFixture();f.state.tour={active:true,paused:true,label:'Entrada',revision:1};f.panel.close();f.panel.update([],'');
+ const ray=new T.Group();ray.position.copy(f.camera.position);
+ function aim(index){const point=f.panel.dock.localToWorld(new T.Vector3(((20+index*198+92)/1024-.5)*.78,(.5-246/320)*.24,0));ray.quaternion.setFromUnitVectors(new T.Vector3(0,0,-1),point.sub(ray.position).normalize());ray.updateMatrixWorld(true);}
+ aim(1);f.panel.beginSelect?.(ray);aim(0);f.panel.select(ray);assert.deepEqual(f.changes.at(-1),['tour','resume'],'release must activate the button chosen at pinch start');
+ const count=f.changes.length;f.state.tour.paused=false;f.state.tour.revision++;f.panel.update([],'');f.panel.select(ray);assert.equal(f.changes.length,count,'one pinch cannot resume then immediately pause');
+ f.panel.endSelect?.(ray);f.panel.beginSelect?.(ray);f.panel.select(ray);assert.deepEqual(f.changes.at(-1),['tour','pause'],'a new deliberate pinch can pause');f.panel.dispose();
+});
+
 test('an open panel remains reachable after recentering or walking physically',()=>{
   const f=panelFixture(),head=new T.Vector3(5,1.65,5);f.panel.ensureReachable(head,new T.Vector3(0,0,-1));
   assert.ok(f.panel.root.position.distanceTo(head)<1.3);assert.ok(Math.abs(f.panel.root.position.y-head.y)<.2);f.panel.dispose();

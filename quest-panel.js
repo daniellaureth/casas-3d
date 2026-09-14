@@ -17,6 +17,7 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
   root.visible=false;
   let page='casa',buttons=[],hover='',message='',inputHint='Aponte e aperte o gatilho para escolher.',draft=null,disposed=false;
   let dockWidth=.28,dockHeight=.07,dockButtons=[],tourRevision=-1;
+  const selections=new WeakMap();
   const a=new Vector3(),b=new Vector3(),origin=new Vector3(),direction=new Vector3();
   function text(value,x,y,size=25,color='#263e33',align='left') {ctx.fillStyle=color;ctx.font=`${size>=28?'600':'400'} ${size}px Arial`;ctx.textAlign=align;ctx.fillText(value,x,y);}
   function rect(x,y,w,h,color) {ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(x,y,w,h,14);ctx.fill();}
@@ -106,7 +107,8 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
   function drawDock(s){
     const tour=s.tour;dockButtons=[];chipContext.fillStyle='#264e3b';chipContext.fillRect(0,0,1024,320);chipContext.fillStyle='#ffffff';chipContext.textAlign='center';
     if(tour?.active){
-      dockWidth=.78;dockHeight=.24;dock.position.set(0,-.40,-1.1);chipContext.font='600 34px Arial';chipContext.fillText('Tour da casa'+(tour.total?' · '+(tour.index+1)+' / '+tour.total:''),360,58);chipContext.font='600 38px Arial';chipContext.fillText(tour.label+(tour.paused?' · Pausado':''),512,143);
+      dockWidth=.78;dockHeight=.24;dock.position.set(0,-.40,-1.1);chipContext.font='600 34px Arial';chipContext.fillText('Tour da casa'+(tour.total?' · '+(tour.index+1)+' / '+tour.total:''),360,58);chipContext.font='600 38px Arial';chipContext.fillText(tour.label+(tour.paused?' · Pausado':''),512,tour.failure?120:143);
+      if(tour.failure){chipContext.font='26px Arial';chipContext.fillText(tour.failure==='route'?'Trajeto indisponível · Continuar para recalcular':'Falha na preparação · Continuar para tentar novamente',512,171);}
       function button(id,label,x,y,w,h,action,disabled=false){chipContext.fillStyle=disabled?'#5f7766':'#eff3e8';chipContext.fillRect(x,y,w,h);chipContext.fillStyle='#264e3b';chipContext.font='600 30px Arial';chipContext.fillText(label,x+w/2,y+h/2+10);dockButtons.push({id,x,y,w,h,action,disabled});}
       button('dock-menu','Opções',820,15,184,60,()=>{camera.getWorldPosition(origin);camera.getWorldDirection(direction);open(origin,direction);});
       [['pause','Pausar'],['resume','Continuar'],['next','Próximo'],['previous','Anterior'],['stop','Encerrar']].forEach(([action,label],i)=>button('dock-tour-'+action,label,20+i*198,205,184,82,()=>{change('tour',action);drawDock(getState());},action==='pause'?tour.paused:action==='resume'?!tour.paused:false));
@@ -135,7 +137,19 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
       if(root.visible)close();else{camera.getWorldPosition(origin);camera.getWorldDirection(direction);open(origin,direction);}
     }}}:null;
   }
-  function select(controller) {const target=hit(controller);if(!target)return false;if(target.button&&!target.button.disabled)target.button.action();return true;}
+  // Bind a pinch/trigger to its press target. The panel and ray may move before
+  // release; the same gesture must never select a second button on the new UI.
+  function beginSelect(controller){const target=hit(controller);selections.set(controller,{target,used:false,visible:root.visible});}
+  function endSelect(controller){selections.delete(controller);}
+  function select(controller) {
+    const held=selections.get(controller);
+    if(held?.used)return !!held.target;
+    const target=held?held.target:hit(controller);if(held)held.used=true;
+    if(!target)return false;
+    if(held&&held.visible!==root.visible)return true;
+    const current=target.button?.id==='dock'?target.button:(root.visible?buttons:dockButtons).find(b=>b.id===target.button?.id);
+    if(current&&!current.disabled&&!target.button.disabled)target.button.action();return true;
+  }
   function update(controllers,hint) {
     const revision=getTourState()?.revision??-1;if(revision!==tourRevision){tourRevision=revision;const state=getState();drawDock(state);if(root.visible)draw();}
     let next='';const hits=controllers.map(c=>{const h=hit(c);if(h?.button&&!h.button.disabled)next=h.button.id;return h;});
@@ -143,7 +157,7 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
     return hits;
   }
   drawDock(getState());
-  return {root,dock,open,place,ensureReachable,select,hit,update,draw,get visible(){return root.visible;},get buttons(){return buttons;},
+  return {root,dock,open,place,ensureReachable,beginSelect,endSelect,select,hit,update,draw,get visible(){return root.visible;},get buttons(){return buttons;},get dockButtons(){return dockButtons;},
     close,dispose(){disposed=true;scene.remove(root);camera.remove(dock);board.geometry.dispose();chipMesh.geometry.dispose();material.dispose();chipMaterial.dispose();texture.dispose();chipTexture.dispose();}};
 }
 

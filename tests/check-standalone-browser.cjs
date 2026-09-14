@@ -42,6 +42,13 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
         const click=id=>evaluate('document.getElementById('+JSON.stringify(id)+').click()');
         const waitFor=async expression=>{for(let i=0;i<3000;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out '+expression);};
         assert.equal(await evaluate('document.querySelectorAll("#day,#night").length'),0,'day/night removed');
+        if(process.argv.includes('--resume-regression')){
+          await evaluate('(()=>{const post=Worker.prototype.postMessage;Worker.prototype.postMessage=function(data,...args){if(data.type==="build"){Worker.prototype.postMessage=post;queueMicrotask(()=>this.dispatchEvent(new MessageEvent("message",{data:{id:data.id,error:"Falha de preparação simulada"}})));return;}return post.call(this,data,...args);};})()');
+          await click('auto-tour');await waitFor('casaDebug().automaticTour.paused&&casaDebug().automaticTour.failure');
+          await click('tour-resume');await waitFor('casaDebug().automaticTour.index>=1&&!casaDebug().automaticTour.paused');
+          console.log('Production Continue recovered the initial failure and reached the next room',JSON.stringify({quest,tour:await evaluate('casaDebug().automaticTour')}));
+          await click('tour-stop');
+        }
         await click('auto-tour');await waitFor('casaDebug().automaticTour.phase!=="planning"');
         assert.equal(await evaluate('casaDebug().walking'),true,'tour starts from overview in first person');
         assert.equal(await evaluate('document.getElementById("tour-hud").hidden'),false);

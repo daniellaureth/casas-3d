@@ -24,7 +24,8 @@ function installXR(){
 (async()=>{
  const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'Casas3D.html'),'utf8').replace('return createQuestPanel({...options','return window.testPanel=createQuestPanel({...options').replace('const failedSession=session;', 'console.error(error);const failedSession=session;').replace('// END NAVIGATION MODULES',`// END NAVIGATION MODULES
  window.holdXRCompile=()=>{const original=ee.compileAsync.bind(ee);ee.compileAsync=(...args)=>Promise.all([original(...args),new Promise(r=>setTimeout(r,1200))]);};
- window.pointXR=id=>{const b=window.testPanel.buttons.find(b=>b.id===id);const point=window.testPanel.root.localToWorld(new q(((b.x+b.w/2)/1040-.5)*1.04,(.5-(b.y+b.h/2)/820)*.82,0));Je.parent.worldToLocal(point);const origin=new q(0,.9,-.3),rotation=new ii().setFromUnitVectors(new q(0,0,-1),point.sub(origin).normalize());window.testRayMatrix=new $t().compose(origin,rotation,new q(1,1,1)).toArray();};
+ window.pointXR=id=>{const compact=id.startsWith('dock-'),b=(compact?window.testPanel.dockButtons:window.testPanel.buttons).find(b=>b.id===id),board=compact?window.testPanel.dock:window.testPanel.root;const point=board.localToWorld(new q(((b.x+b.w/2)/(compact?1024:1040)-.5)*(compact?.78:1.04),(.5-(b.y+b.h/2)/(compact?320:820))*(compact?.24:.82),0));Je.parent.worldToLocal(point);const origin=new q(0,.9,-.3),rotation=new ii().setFromUnitVectors(new q(0,0,-1),point.sub(origin).normalize());window.testRayMatrix=new $t().compose(origin,rotation,new q(1,1,1)).toArray();};
+ const originalTourPost=Worker.prototype.postMessage;Worker.prototype.postMessage=function(data,...args){if(window.failNextTourBuild&&data.type==='build'){window.failNextTourBuild=false;queueMicrotask(()=>this.dispatchEvent(new MessageEvent('message',{data:{id:data.id,error:'Falha de preparação simulada'}})));return;}return originalTourPost.call(this,data,...args);};
  window.inspectXR=()=>({debug:casaDebug(),tourPoints:houseTour.points,spawn:walkPhysics.spawn,foveation:ee.xr.getFoveation(),lights:Tn.children.filter(o=>o.isLight).map(o=>({type:o.type,visible:o.visible,intensity:o.intensity})),camera:Je.matrixWorld.toArray(),eyes:ee.xr.getCamera().cameras.map(c=>({world:c.matrixWorld.toArray(),projection:c.projectionMatrix.toArray()}))});`);
  const server=http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(html.replace('<head>',()=>'<head><script>('+installXR.toString()+')()</script>'));});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const profile=fs.mkdtempSync(path.join(os.tmpdir(),'casas-xr-')),browser=spawn(path.join(process.env.ProgramFiles,'Google/Chrome/Application/chrome.exe'),['--app=about:blank','--user-data-dir='+profile,'--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows','--disable-features=CalculateNativeWinOcclusion','--no-first-run','--no-default-browser-check','--window-size=1440,950','--remote-debugging-port=0'],{stdio:'ignore'});let ws;
@@ -50,10 +51,25 @@ function installXR(){
   await evaluate('testSession.inputSources=[{targetRaySpace:{},handedness:"right",targetRayMode:"tracked-pointer",profiles:["oculus-touch-v3"],gamepad:{axes:[0,0,0,0],buttons:[]}}];testSession.dispatchEvent(Object.assign(new Event("inputsourceschange"),{added:testSession.inputSources,removed:[]}));pointXR("facade-1")');await delay(100);
   if(!process.argv.includes('--keep-facade')){await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');await delay(200);assert.notEqual(await evaluate('casaDebug().facade'),state.debug.facade);}
   if(process.argv.includes('--experiences')){
-    const click=async id=>{await evaluate('pointXR('+JSON.stringify(id)+')');await delay(40);await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');};
+    const gesture=type=>evaluate('testSession.dispatchEvent(Object.assign(new Event('+JSON.stringify(type)+'),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');
+    const click=async id=>{await evaluate('pointXR('+JSON.stringify(id)+')');await delay(60);await gesture('selectstart');await gesture('select');await gesture('selectend');};
     const waitFor=async(expression,attempts=3000)=>{for(let i=0;i<attempts;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out: '+expression+' '+JSON.stringify(await evaluate('casaDebug()')));};
     const menu=async()=>{await evaluate('testSession.inputSources[0].gamepad.buttons[5]={pressed:true}');await delay(50);await evaluate('testSession.inputSources[0].gamepad.buttons[5].pressed=false');await delay(50);};
     const before=await evaluate('casaDebug()');assert.equal(await evaluate('document.querySelectorAll("#day,#night").length'),0);
+    if(process.argv.includes('--resume-regression')){
+      await evaluate('window.failNextTourBuild=true');await click('tour-quick');
+      await waitFor('casaDebug().automaticTour.paused&&casaDebug().automaticTour.phase==="error"');
+      const failed=await evaluate('casaDebug().automaticTour');assert.ok(failed.failure);
+      await waitFor('testPanel.dockButtons.some(b=>b.id==="dock-tour-resume"&&!b.disabled)');
+      await evaluate('pointXR("dock-tour-resume")');await delay(80);await gesture('selectstart');
+      await evaluate('pointXR("dock-tour-pause")');await delay(80);await gesture('select');await gesture('select');await gesture('selectend');
+      await waitFor('casaDebug().automaticTour.index>=1&&!casaDebug().automaticTour.paused');
+      await click('dock-tour-pause');const stopped=await evaluate('casaDebug().vr.head');await delay(350);assert.deepEqual(await evaluate('casaDebug().vr.head'),stopped);
+      await click('dock-tour-resume');await waitFor('Math.hypot(...casaDebug().vr.head.map((v,i)=>v-'+JSON.stringify(stopped)+'[i]))>.2');
+      assert.equal(await evaluate('casaDebug().automaticTour.paused'),false,'Continue must actually move the visitor and remain unpaused');
+      console.log('Recovered initial failure and repeated Continue using actual XR press/release events',JSON.stringify(await evaluate('casaDebug().automaticTour')));
+      await menu();await click('tab-passeio');await click('go-entry');
+    }
     await evaluate('window.testHeadMotion=true');await click('tour-quick');
     await waitFor('casaDebug().automaticTour.index>=2 && casaDebug().automaticTour.active',3000);
     assert.equal(await evaluate('casaDebug().automaticTour.paused'),false,'entrance and living room advance without clicking Next');

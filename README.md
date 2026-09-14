@@ -63,6 +63,9 @@ O percurso termina de volta ao chão. Encerrar também devolve a uma posição l
 para caminhar. Se uma planta modificada não tiver uma conexão livre, o painel
 informa a passagem indisponível e permite avançar ou encerrar; não teleporta.
 No computador, o mesmo enquadramento guiado permite olhar com o mouse.
+Continuar retoma uma pausa normal e, em caso de falha de preparação, recria
+o planejador e tenta o mesmo destino novamente. A seleção VR acompanha o
+botão apontado no início da pinça/gatilho, mesmo que a mão se mova ao soltar.
 O painel mostra a etapa atual e o total de paradas. Os textos do menu VR usam
 texturas de 2048 pixels e menos redução de qualidade enquanto o painel está aberto.
 

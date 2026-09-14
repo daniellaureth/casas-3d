@@ -153,12 +153,13 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
 }
 
 function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,onChange=()=>{},plannerFactory=()=>null}) {
-  const state={active:false,paused:false,label:'',phase:'idle',index:0,total:0,revision:0,fade:0,message:'',focus:null,heading:null,kind:'room'};
+  const state={active:false,paused:false,label:'',phase:'idle',index:0,total:0,revision:0,fade:0,message:'',focus:null,heading:null,kind:'room',failure:null};
   let navigation=null,physics=null,path=null,cursor=1,speed=0,hold=0,turnSpeed=0,remaining=[];
-  let planner=null,generation=0,requestId=0,lastPosition=null;
+  let planner=null,generation=0,requestId=0,lastPosition=null,restartIndex=null;
   const radians=Math.PI/180,turnRate=(config.turnSpeed??18)*radians,turnAcceleration=(config.turnAcceleration??14)*radians;
   const difference=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
   function changed(){state.revision++;onChange(state);}
+  function preparationFailed(error){state.failure='preparation';state.phase='error';state.paused=true;speed=0;state.message=(error?.message||'Não foi possível preparar o tour.')+' Toque em Continuar para tentar novamente.';changed();}
   function aimHeading(position,aim){return Math.hypot(aim.x-position.x,aim.z-position.z)>.15?Math.atan2(position.x-aim.x,position.z-aim.z):navigation.points[state.index].heading;}
   function turn(heading,dt){
     const angle=difference(heading,state.heading),target=Math.sign(angle)*Math.min(turnRate,Math.sqrt(2*turnAcceleration*Math.abs(angle)));
@@ -172,43 +173,47 @@ function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,on
     for(let radius=.1;!safe&&radius<=4;radius+=.1)for(let i=0;i<48;i++){const angle=i*Math.PI/24,px=x+Math.cos(angle)*radius,pz=z+Math.sin(angle)*radius;if(!p.blocked(px,pz)){safe={x:px,z:pz};break;}}
     safe||=p.spawn;lastPosition.x=safe.x;lastPosition.z=safe.z;lastPosition.y=p.floorAt(safe.x,safe.z)+p.eyeHeight;
   }
-  function stop(message='Tour encerrado.'){generation++;requestId++;planner?.dispose();planner=null;restoreWalking();state.active=false;state.paused=false;state.phase='idle';state.fade=0;state.focus=null;state.heading=null;state.message=message;speed=0;changed();}
+  function stop(message='Tour encerrado.'){generation++;requestId++;planner?.dispose();planner=null;restoreWalking();state.active=false;state.paused=false;state.phase='idle';state.fade=0;state.focus=null;state.heading=null;state.failure=null;state.message=message;speed=0;changed();}
   function setRoute(index,position,prepared){
     if(index>=navigation.points.length){stop('Tour concluído.');return;}
-    state.index=Math.max(0,index);const destination=navigation.points[state.index];state.label=destination.label;state.focus=destination.focus||null;state.kind=destination.kind||'room';state.message='Assista sentado. O tour apresenta a casa à frente; olhe livremente para os lados.';
+    state.index=Math.max(0,index);restartIndex=state.index;state.failure=null;const destination=navigation.points[state.index];state.label=destination.label;state.focus=destination.focus||null;state.kind=destination.kind||'room';state.message='Assista sentado. O tour apresenta a casa à frente; olhe livremente para os lados.';
     path=prepared!==undefined?prepared:navigation.route(position,destination);cursor=1;speed=0;state.fade=0;
     if(path){
       remaining=new Float64Array(path.length);for(let i=path.length-2;i>=0;i--)remaining[i]=remaining[i+1]+Math.hypot(path[i+1].x-path[i].x,path[i+1].y-path[i].y,path[i+1].z-path[i].z);
       state.phase='moving';
-    }else{state.phase='unavailable';state.paused=true;state.message='Não há passagem livre até '+destination.label+'. Use Próximo ambiente ou encerre o tour.';}
+    }else{state.phase='unavailable';state.failure='route';state.paused=true;state.message='Não há passagem livre até '+destination.label+'. Continuar recalcula o trajeto; você também pode encerrar.';}
     changed();
   }
-  function start(position,heading=0){generation++;requestId++;planner?.dispose();planner=null;physics=getPhysics();lastPosition=position;const token=generation;navigation=null;state.total=0;state.index=0;state.focus=null;state.heading=heading;turnSpeed=0;
-    planner=plannerFactory();if(planner){
-      state.active=true;state.paused=false;state.fade=0;state.phase='planning';state.label='Preparando tour…';state.message='O percurso está sendo calculado.';changed();
-      const origin={x:position.x,y:position.y,z:position.z};planner.build({physics,plan:getPlan(),model:getModel(),position:origin,config}).then(result=>{
+  function start(position,heading=0,startIndex=null){generation++;requestId++;planner?.dispose();planner=null;physics=getPhysics();lastPosition=position;const token=generation;navigation=null;restartIndex=startIndex;state.total=0;state.index=startIndex??0;state.focus=null;state.heading=heading;state.failure=null;turnSpeed=0;
+    state.active=true;state.paused=false;state.fade=0;state.phase='planning';state.label='Preparando tour…';state.message='O percurso está sendo calculado.';changed();
+    try{planner=plannerFactory();if(planner){
+      const origin={x:position.x,y:position.y,z:position.z};planner.build({physics,plan:getPlan(),model:getModel(),position:origin,config,startIndex}).then(result=>{
         if(!state.active||generation!==token)return;navigation=result;state.total=result.points.length;setRoute(result.index,origin,result.path);
-      },error=>{if(generation!==token)return;state.paused=true;state.message=error.message;changed();});return state;
+      }).catch(error=>{if(generation!==token)return;preparationFailed(error);});return state;
     }
     navigation=buildHouseTour({physics,plan:getPlan(),model:getModel(),position,config});
-    let index=0;if(config.start!=='entry'){let d=Infinity;navigation.points.forEach((p,i)=>{const n=Math.hypot(p.x-position.x,p.z-position.z);if(n<d){d=n;index=i;}});}
+    let index=Number.isInteger(startIndex)?Math.min(startIndex,navigation.points.length-1):0;if(startIndex===null&&config.start!=='entry'){let d=Infinity;navigation.points.forEach((p,i)=>{const n=Math.hypot(p.x-position.x,p.z-position.z);if(n<d){d=n;index=i;}});}
     state.active=true;state.paused=false;state.total=navigation.points.length;setRoute(index,position);return state;
+    }catch(error){preparationFailed(error);return state;}
   }
   function action(type,position,heading=0){
     if(type==='start')return start(position,heading);if(type==='stop'){stop();return;}
     if(!state.active)return;
     if(type==='pause'){state.paused=true;speed=0;turnSpeed=0;state.fade=0;changed();}
-    if(type==='resume'){state.paused=false;changed();}
+    if(type==='resume'){
+      if(state.failure)return start(position,state.heading??heading,restartIndex);
+      state.paused=false;changed();
+    }
     if((type==='next'||type==='previous')&&navigation&&state.phase!=='planning'){
-      const index=Math.max(0,Math.min(navigation.points.length-1,state.index+(type==='next'?1:-1)));state.paused=false;
+      const index=Math.max(0,Math.min(navigation.points.length-1,state.index+(type==='next'?1:-1)));restartIndex=index;state.paused=false;
       if(planner){const id=++requestId,token=generation;state.phase='planning';state.message='Preparando o próximo percurso…';state.fade=0;changed();
-        const origin={x:position.x,y:position.y,z:position.z};planner.route(index,origin).then(path=>{if(state.active&&id===requestId&&generation===token)setRoute(index,origin,path);},error=>{if(id===requestId&&generation===token){state.paused=true;state.message=error.message;changed();}});
+        const origin={x:position.x,y:position.y,z:position.z};try{planner.route(index,origin).then(path=>{if(state.active&&id===requestId&&generation===token)setRoute(index,origin,path);}).catch(error=>{if(id===requestId&&generation===token)preparationFailed(error);});}catch(error){preparationFailed(error);}
       }else setRoute(index,position);
     }
   }
   function update(position,delta){
     if(!state.active)return false;lastPosition=position;if(getPhysics()!==physics){stop('Planta alterada. Inicie um novo tour.');return false;}
-    if(state.paused||state.phase==='planning'||state.phase==='unavailable')return true;const dt=Math.min(.05,delta),destination=navigation.points[state.index];
+    if(state.paused||state.phase==='planning'||state.phase==='unavailable'||state.phase==='error')return true;const dt=Math.min(.05,delta),destination=navigation.points[state.index];
     // Animate existing doors ahead of the visitor; furniture never halts playback.
     for(const door of physics.doors)if(Math.hypot(door.hingeX-position.x,door.hingeZ-position.z)<2.5)door.target=door.openAngle;
     if(state.phase==='dwell'){hold-=dt;if(hold<=0)setRoute(state.index+1,position,navigation.legs[state.index]);return true;}

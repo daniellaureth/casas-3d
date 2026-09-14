@@ -5,20 +5,23 @@ function createTourPlanner(){
     onmessage=event=>{const {id,type,data}=event.data;try{
       let result;if(type==='build'){
         const physics=createWalkPhysics(data.physics);physics.spawn=data.spawn;physics.site=data.site;physics.tourAltitude=data.tourAltitude;physics.roofTop=data.roofTop;physics.flightBoxes=data.flightBoxes;
-        navigation=buildHouseTour({...data,physics});let index=0,distance=Infinity;
-        if(data.config.start!=='entry')navigation.points.forEach((p,i)=>{const d=Math.hypot(p.x-data.position.x,p.z-data.position.z);if(d<distance){distance=d;index=i;}});
+        navigation=buildHouseTour({...data,physics});let index=Number.isInteger(data.startIndex)?Math.min(data.startIndex,navigation.points.length-1):0,distance=Infinity;
+        if(data.startIndex==null&&data.config.start!=='entry')navigation.points.forEach((p,i)=>{const d=Math.hypot(p.x-data.position.x,p.z-data.position.z);if(d<distance){distance=d;index=i;}});
         result={points:navigation.points,legs:navigation.legs,index,path:navigation.route(data.position,navigation.points[index])};
       }else result=navigation.route(data.position,navigation.points[data.index]);
       postMessage({id,result});
     }catch(error){postMessage({id,error:error.message});}};`;
   const url=URL.createObjectURL(new Blob([source],{type:'text/javascript'})),worker=new Worker(url),requests=new Map();let id=0;
-  worker.onmessage=event=>{const pending=requests.get(event.data.id);if(!pending)return;requests.delete(event.data.id);event.data.error?pending.reject(Error(event.data.error)):pending.resolve(event.data.result);};
-  worker.onerror=()=>{for(const pending of requests.values())pending.reject(Error('Não foi possível preparar o tour.'));requests.clear();};
-  function request(type,data){return new Promise((resolve,reject)=>{requests.set(++id,{resolve,reject});worker.postMessage({id,type,data});});}
+  worker.onmessage=event=>{const pending=requests.get(event.data.id);if(!pending)return;requests.delete(event.data.id);clearTimeout(pending.timer);event.data.error?pending.reject(Error(event.data.error)):pending.resolve(event.data.result);};
+  worker.onerror=event=>{event?.preventDefault?.();for(const pending of requests.values()){clearTimeout(pending.timer);pending.reject(Error('Não foi possível preparar o tour.'));}requests.clear();};
+  function request(type,data){return new Promise((resolve,reject)=>{
+    const key=++id,timer=setTimeout(()=>{requests.delete(key);reject(Error('A preparação do percurso demorou demais.'));},20000);
+    requests.set(key,{resolve,reject,timer});try{worker.postMessage({id:key,type,data});}catch(error){clearTimeout(timer);requests.delete(key);reject(error);}
+  });}
   return {
-    build({physics,plan,model,position,config}){return request('build',{plan:{w:plan.w,d:plan.d,rooms:plan.rooms},model,position:{x:position.x,y:position.y,z:position.z},config,spawn:physics.spawn,site:physics.site,tourAltitude:physics.tourAltitude,roofTop:physics.roofTop,flightBoxes:physics.flightBoxes,
+    build({physics,plan,model,position,config,startIndex=null}){return request('build',{plan:{w:plan.w,d:plan.d,rooms:plan.rooms},model,position:{x:position.x,y:position.y,z:position.z},config,startIndex,spawn:physics.spawn,site:physics.site,tourAltitude:physics.tourAltitude,roofTop:physics.roofTop,flightBoxes:physics.flightBoxes,
       physics:{boxes:physics.boxes.filter(b=>!b.enabled||b.enabled()).map(({enabled,...box})=>box),floors:physics.floors,doors:physics.doors.map(({apply,...door})=>door),radius:physics.radius,eyeHeight:physics.eyeHeight}});},
     route(index,position){return request('route',{index,position:{x:position.x,y:position.y,z:position.z}});},
-    dispose(){worker.terminate();URL.revokeObjectURL(url);for(const pending of requests.values())pending.reject(Error('Tour encerrado.'));requests.clear();}
+    dispose(){worker.terminate();URL.revokeObjectURL(url);for(const pending of requests.values()){clearTimeout(pending.timer);pending.reject(Error('Tour encerrado.'));}requests.clear();}
   };
 }

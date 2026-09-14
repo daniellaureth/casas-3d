@@ -1,6 +1,6 @@
 {
   "name": "casas-3d",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "description": "Casas 3D — computador e Meta Quest standalone",
   "scripts": {
@@ -10,5 +10,7 @@
     "dev": "node scripts/serve.cjs --source",
     "preview": "node scripts/serve.cjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }

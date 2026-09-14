@@ -8,6 +8,27 @@ test('canceling route preparation ignores late worker results and releases the p
 });
 function fixture(model){const house=T.xx(model,{width:15,depth:30}),physics=T.createHousePhysics(house,{Box3:T.Box3}),position={...physics.spawn,y:physics.floorAt(physics.spawn.x,physics.spawn.z)+physics.eyeHeight};
  const tour=T.createHouseTour({getPhysics:()=>physics,getPlan:()=>house.userData.plan,getModel:()=>model,config:{...T.config,dwell:.05,stops:T.config.stops.map(s=>({...s,dwell:.05}))}});return {house,physics,position,tour};}
+
+test('Continue after a failed initial preparation recreates the planner and actually leaves the entrance',async()=>{
+ const f=fixture('50');let attempts=0,disposed=0;
+ const tour=T.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=> '50',plannerFactory:()=>({
+  build(data){if(++attempts===1)return Promise.reject(Error('Falha ao preparar o percurso.'));const nav=T.buildHouseTour(data),index=data.startIndex??0;return Promise.resolve({points:nav.points,legs:nav.legs,index,path:nav.route(data.position,nav.points[index])});},dispose(){disposed++;}
+ })});
+ tour.start(f.position);await new Promise(setImmediate);assert.equal(tour.state.paused,true);
+ const before={...f.position};tour.action('resume',f.position);await new Promise(setImmediate);
+ for(let i=0;i<900&&tour.state.index<1;i++){tour.update(f.position,.05);f.physics.update(.05,null);}
+ assert.equal(attempts,2,'Continue must request a new route, not just clear the paused flag');assert.ok(disposed>=1,'failed planner is disposed');assert.equal(tour.state.paused,false);assert.ok(tour.state.index>=1,'tour must leave the entrance');assert.ok(Math.hypot(f.position.x-before.x,f.position.y-before.y,f.position.z-before.z)>.1);tour.stop();
+});
+
+test('Continue recalculates an unavailable route and retains its destination',()=>{
+ const barrier={minX:-.1,maxX:.1,minZ:-20,maxZ:20,bottom:0,top:3};
+ const physics=Object.assign(T.createWalkPhysics({boxes:[barrier]}),{spawn:{x:-1,z:0}}),position={x:-1,y:1.65,z:0};
+ const tour=T.createHouseTour({getPhysics:()=>physics,getPlan:()=>({w:4,d:4,rooms:[['Sala',2,1,2,2]]}),getModel:()=> 'test',config:{...T.config,dwell:0,stops:[{id:'entry',kind:'entry'},{id:'room',room:'Sala'}]}});
+ tour.start(position);for(let i=0;i<1000&&!tour.state.paused;i++)tour.update(position,.05);assert.equal(tour.state.paused,true);assert.equal(tour.state.index,1);
+ physics.boxes.length=0;tour.action('resume',position);let reached=false;
+ for(let i=0;i<2000&&tour.state.active;i++){tour.update(position,.05);if(tour.state.index===1&&tour.state.phase==='dwell')reached=true;}
+ assert.ok(reached,'Continue must recover the route and physically reach the selected room');assert.equal(tour.state.active,false);
+});
 test('all furnished plans visit every room and the actual lot, without visible wall crossings',()=>{
  for(const model of ['50','60','62','69'].filter(m=>!process.env.TOUR_MODEL||process.env.TOUR_MODEL===m)){
   const f=fixture(model),start=performance.now();f.tour.start(f.position);const prepareMs=performance.now()-start;

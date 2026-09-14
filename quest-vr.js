@@ -77,7 +77,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     panel?.dispose();panel=null;
     for(const item of handVisuals){item.visual.dispose();rig.remove(item.hand);}handVisuals.length=0;
     for(const pointer of pointers)pointer?.dispose();pointers.length=0;
-    for (const controller of rayControllers) { controller.removeEventListener('select', interact); rig.remove(controller); }
+    for (const controller of rayControllers) { controller.removeEventListener('select', interact);controller.removeEventListener('selectstart',beginInteraction);controller.removeEventListener('selectend',endInteraction); rig.remove(controller); }
     rayControllers.length = 0;
     camera.remove(curtain);
     curtain?.geometry?.dispose(); curtain?.material?.dispose();
@@ -105,6 +105,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     xrCamera.getWorldPosition(head); xrCamera.getWorldDirection(direction);
     return getPhysics().interact(head, direction);
   }
+  function beginInteraction(event){if(active&&!loading&&event?.target)panel?.beginSelect?.(event.target);}
+  function endInteraction(event){if(event?.target)panel?.endSelect?.(event.target);}
   function interact(event) {
     if(!active)return;
     if(loading){loading.select(event.target);return;}
@@ -349,7 +351,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       curtain=makeCurtain(); curtain.visible=false; camera.add(curtain);
       renderer.shadowMap.enabled=false;
       for(let i=0;i<2;i++) {
-        const controller=renderer.xr.getController(i);rig.add(controller);controller.addEventListener('select',interact);rayControllers.push(controller);
+        const controller=renderer.xr.getController(i);rig.add(controller);controller.addEventListener('selectstart',beginInteraction);controller.addEventListener('select',interact);controller.addEventListener('selectend',endInteraction);rayControllers.push(controller);
         pointers.push(createPointer?.(controller));
         if(createHand&&renderer.xr.getHand){const hand=renderer.xr.getHand(i);rig.add(hand);handVisuals.push({hand,visual:createHand(hand)});}
       }
