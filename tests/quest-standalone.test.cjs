@@ -34,11 +34,14 @@ test('production is self-contained and resolves from a repository subpath',async
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   try{const base='http://127.0.0.1:'+server.address().port;
     const response=await fetch(base+'/casas-3d/');assert.equal(response.status,200);
-    const production=await response.text();assert.equal(production,html);
+    const production=await response.text();assert.ok(Buffer.byteLength(production)<50000,'loading appears before the large app downloads');
+    assert.match(production,/id="casa-load-progress"/);
+    const manifest=await(await fetch(base+'/casas-3d/version.json')).json();
+    const app=await(await fetch(base+'/casas-3d/'+manifest.appFile)).text();assert.equal(app,html.match(/<script type="module">([\s\S]*?)<\/script>/)[1]);
     const resources=[...production.matchAll(/(?:src|href)=["']([^"']+)["']/g)].map(m=>m[1]);
     assert.deepEqual(resources.filter(url=>!url.startsWith('data:')&&!url.startsWith('#')),[]);
     assert.equal((await fetch(base+'/casas-3d/missing.glb')).status,404);
-    assert.deepEqual(fs.readdirSync(path.join(root,'dist')).sort(),['.nojekyll','index.html','version.json']);
+    assert.deepEqual(fs.readdirSync(path.join(root,'dist')).sort(),['.nojekyll',manifest.appFile,'index.html','version.json'].sort());
   }finally{await new Promise(r=>server.close(r));}
 });
 test('standalone calibrates height, handles both Touch sticks and ray triggers, and exits',async()=>{

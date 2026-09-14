@@ -2,9 +2,9 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'Casas3D.html'),'utf8');
 function fixture(model='50',panelFactory) {
   const elements={'quest-vr':{},'quest-status':{}};
-  const errors=[];
+  const errors=[];let clock=0,monitor=null;
   class Layer {constructor(){this.framebuffer={};this.framebufferWidth=2000;this.framebufferHeight=1000;}getViewport(view){return {x:view.eye==='left'?0:1000,y:0,width:1000,height:1000};}}
-  const ctx=VM.createContext({console:{...console,error:(...args)=>errors.push(args)},AbortController,performance,URL,queueMicrotask,XRWebGLLayer:Layer,navigator:{userAgent:'Android OculusBrowser Quest 3S'},window:{isSecureContext:true},document:{getElementById:id=>elements[id],body:{classList:{add(){},remove(){}}}}});
+  const ctx=VM.createContext({console:{...console,error:(...args)=>errors.push(args)},AbortController,performance:{now:()=>clock},setInterval(fn){monitor=fn;return 1;},clearInterval(){monitor=null;},URL,queueMicrotask,XRWebGLLayer:Layer,navigator:{userAgent:'Android OculusBrowser Quest 3S'},window:{isSecureContext:true},document:{getElementById:id=>elements[id],body:{classList:{add(){},remove(){}}}}});
   VM.runInContext(html.slice(html.indexOf('// BEGIN QUEST GRAPHICS'),html.indexOf('let walkPhysics=null'))+['walk-layout.js','walk-physics.js','quest-vr.js'].map(f=>fs.readFileSync(path.join(root,f),'utf8')).join('\n')+';globalThis.api={XRManager:vm,Group:Ce,Vector3:q,Quaternion:ii,Matrix4:$t,PerspectiveCamera:Qe,xx,Box3:si,createHousePhysics,createQuestVR};',ctx);
   const T=ctx.api,house=T.xx(model,{width:15,depth:30}),physics=T.createHousePhysics(house,{Box3:T.Box3});
   const camera=new T.PerspectiveCamera(38,1,.1,500),scene=new T.Group(),controls={enabled:true};camera.position.set(4,6,8);
@@ -17,13 +17,14 @@ function fixture(model='50',panelFactory) {
   renderer.render=()=>{scene.updateMatrixWorld();renderer.xr.updateCamera(camera);};
   const mode=T.createQuestVR({...T,renderer,scene,camera,controls,airLink:false,makeCurtain:()=>{curtain=new T.Group();return curtain;},prepare(){},restore(){},invalidate(){},getPhysics:()=>physics,createPanel:panelFactory});
   function tick(time,{x=0,y=1.7,z=0,yaw=0,tracked=true}={}) {
+    clock=time;
     const projection=new T.PerspectiveCamera(90,1,.1,500).projectionMatrix.toArray();
     const rotation=new T.Quaternion().setFromAxisAngle(new T.Vector3(0,1,0),yaw);
     const views=['left','right'].map(eye=>({eye,projectionMatrix:projection,transform:{matrix:new T.Matrix4().compose(new T.Vector3(x+(eye==='left'?-.032:.032),y,z),rotation,new T.Vector3(1,1,1)).toArray()}}));
     callback(time,{getViewerPose:()=>tracked?{views}:null});
     return {head:camera.getWorldPosition(new T.Vector3()).toArray(),curtain:curtain.visible,rig:camera.parent?.position.toArray()};
   }
-  return {mode,tick,physics,camera,session,renderer,errors};
+  return {mode,tick,physics,camera,session,renderer,errors,advanceClock(ms){clock+=ms;monitor?.();}};
 }
 test('real Three XR manager keeps a stationary tracked head outside walls',async()=>{
   for(const model of ['50','60','62','69']) {
@@ -52,4 +53,19 @@ test('tracking can start after a frame without a viewer pose',async()=>{
   const f=fixture();await f.mode.enter();f.tick(0,{tracked:false});
   for(let i=1;i<5;i++){const state=f.tick(i*14,{x:3,z:4});assert.equal(state.curtain,false,JSON.stringify(state));assert.ok(Math.hypot(state.head[0]-f.physics.spawn.x,state.head[2]-f.physics.spawn.z)<.08,JSON.stringify(state));}
   await f.mode.end();
+});
+test('refresh-rate negotiation cannot block the first VR frame',async()=>{
+  const f=fixture();f.session.supportedFrameRates=[72];f.session.updateTargetFrameRate=()=>new Promise(()=>{});
+  const result=await Promise.race([f.mode.enter().then(()=>true),new Promise(resolve=>setTimeout(()=>resolve(false),300))]);
+  assert.equal(result,true);f.tick(0);assert.equal(f.mode.diagnostics.frames,1);await f.mode.end();
+});
+test('stopped frames recover to the browser and the Meta menu can pause safely',async()=>{
+  const f=fixture();f.session.visibilityState='visible';await f.mode.enter();f.tick(0);
+  f.session.visibilityState='visible-blurred';f.advanceClock(30000);assert.equal(f.mode.active,true);
+  f.session.visibilityState='visible';f.advanceClock(1000);assert.equal(f.mode.active,true);
+  f.advanceClock(21000);await Promise.resolve();assert.equal(f.mode.active,false);assert.match(f.mode.diagnostics.frameError,/parou/);
+});
+test('a session that never delivers its first frame returns to the browser',async()=>{
+  const f=fixture();await f.mode.enter();f.advanceClock(21000);await Promise.resolve();
+  assert.equal(f.mode.active,false);assert.match(f.mode.diagnostics.frameError,/não iniciou/);
 });

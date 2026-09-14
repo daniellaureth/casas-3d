@@ -3,9 +3,10 @@
 function createQuestHandVisual({hand,Group,Mesh,InstancedMesh,BufferGeometry,BufferAttribute,SphereGeometry,MeshStandardMaterial,Vector3}) {
   const skin=new MeshStandardMaterial({color:0xd6a384,roughness:.78,metalness:0,emissive:0x352018,emissiveIntensity:.12});
   const nailMaterial=new MeshStandardMaterial({color:0xe3bba2,roughness:.65,metalness:0});
-  const sphere=new SphereGeometry(1,20,14),palm=new InstancedMesh(sphere,skin,3),nails=new InstancedMesh(sphere,nailMaterial,5);
+  const sphere=new SphereGeometry(1,16,10),palm=new InstancedMesh(sphere,skin,3),nails=new InstancedMesh(sphere,nailMaterial,5);
   const fingers=['thumb','index-finger','middle-finger','ring-finger','pinky-finger'];
-  const R=26,S=16,vertices=new Float32Array(5*R*S*3),indices=[];
+  // Smooth curves with fewer rings keep the per-frame joint update light on Quest.
+  const R=18,S=12,vertices=new Float32Array(5*R*S*3),indices=[];
   const axes=['x','y','z'],circle=Array.from({length:S},(_,i)=>[Math.cos(i/S*Math.PI*2),Math.sin(i/S*Math.PI*2)]);
   const chains=fingers.map(name=>name==='thumb'?['thumb-metacarpal','thumb-phalanx-proximal','thumb-phalanx-distal','thumb-tip']:[name+'-phalanx-proximal',name+'-phalanx-intermediate',name+'-phalanx-distal',name+'-tip']);
   for(let f=0;f<5;f++)for(let r=0;r<R-1;r++)for(let s=0;s<S;s++){

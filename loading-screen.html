@@ -1,0 +1,29 @@
+<!-- BEGIN CASA LOADING -->
+<style>
+#casa-loading{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:#f7f6ef;color:#294436;font-family:Arial,sans-serif;transition:opacity .28s}
+#casa-loading[hidden]{display:none}#casa-loading.leaving{opacity:0;pointer-events:none}
+.casa-load-card{width:min(360px,calc(100vw - 64px));text-align:center}.casa-load-icon{width:60px;height:60px;margin:0 auto 24px;color:#41684e}
+.casa-load-brand{font-size:11px;letter-spacing:3px;margin-bottom:18px}.casa-load-card h1{font:normal 34px/1.12 Georgia,serif;margin:0 0 12px}.casa-load-card p{font-size:14px;line-height:1.5;color:#637364;min-height:42px}
+.casa-load-track{height:8px;background:#e2e8dd;border-radius:8px;overflow:hidden;margin-top:24px}.casa-load-fill{height:100%;width:0;background:#41684e;border-radius:8px;transition:width .16s linear}
+.casa-load-numbers{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:#6b786d}.casa-load-numbers strong{color:#294436;font-size:16px;font-weight:500}
+#casa-load-retry{margin:20px auto 0;padding:12px 24px;border:0;border-radius:8px;background:#315c44;color:white;cursor:pointer;font-size:14px}
+#casa-load-retry[hidden]{display:none}
+@media(prefers-reduced-motion:reduce){#casa-loading,.casa-load-fill{transition:none}}
+</style>
+<script>
+(()=>{
+ let percent=0,label='Preparando sua visita…',done=false,failed=false;
+ const paint=()=>{const root=document.getElementById('casa-loading');if(!root)return;document.getElementById('casa-load-fill').style.width=percent+'%';document.getElementById('casa-load-percent').textContent=Math.floor(percent)+'%';document.getElementById('casa-load-status').textContent=label;document.getElementById('casa-load-progress').setAttribute('aria-valuenow',String(Math.floor(percent)));document.getElementById('casa-load-retry').hidden=!failed;};
+ const onError=()=>api.fail();
+ const api=window.CasaLoading={
+  set(value,text){if(done||failed)return;percent=Math.max(percent,Math.min(99,value));label=text||label;paint();},
+  async stage(value,text){api.set(value,text);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));},
+  ready(){if(done||failed)return;done=true;percent=100;label='Sua casa está pronta.';paint();window.removeEventListener('error',onError);window.removeEventListener('unhandledrejection',onError);requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(()=>{const root=document.getElementById('casa-loading');root?.classList.add('leaving');setTimeout(()=>{if(root)root.hidden=true;},300);},200)));},
+  fail(){if(done)return;failed=true;label='Não foi possível carregar a casa. Confira sua conexão e tente novamente.';paint();},
+  get state(){return {percent,label,done,failed};}
+ };
+ window.addEventListener('error',onError);window.addEventListener('unhandledrejection',onError);
+ document.addEventListener('DOMContentLoaded',()=>{paint();document.getElementById('casa-load-retry').onclick=()=>location.reload();});
+})();
+</script>
+<!-- END CASA LOADING -->

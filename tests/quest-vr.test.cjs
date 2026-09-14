@@ -11,7 +11,7 @@ function setup(xr, airLink = false) {
   const camera=new Group();camera.clearViewOffset=()=>{};camera.position.set(4,6,8);
   const scene=new Group(),controls={enabled:true};
   const renderer={shadowMap:{enabled:true},setAnimationLoop(fn){this.loop=fn;},xr:{setReferenceSpaceType(){},setFramebufferScaleFactor(){},getController(){return new Group();},async setSession(s){this.session=s;},setFoveation(){}}};
-  const context=vm.createContext({navigator:{xr},window:{isSecureContext:true},document:{getElementById:id=>id==='quest-vr'?button:status,body:{classList:{add(){},remove(){}}}},queueMicrotask});
+  const context=vm.createContext({performance,navigator:{xr},window:{isSecureContext:true},document:{getElementById:id=>id==='quest-vr'?button:status,body:{classList:{add(){},remove(){}}}},queueMicrotask});
   const create=vm.runInContext(source+'\ncreateQuestVR',context);
   const mode=create({renderer,scene,camera,controls,Group,Vector3:Vector,airLink,makeCurtain:()=>new Group(),prepare(){prepared++;},restore(){restored++;},getPhysics:()=>({spawn:{x:1,z:2},floorAt:()=>0}),invalidate(){}});
   return {mode,camera,controls,renderer,status,button,get prepared(){return prepared;},get restored(){return restored;}};

@@ -10,7 +10,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   const rayControllers = [];
   const handVisuals=[],pointers=[];
   let panel=null,openPanelNextFrame=false,menuPressed=false,floorLevel=0,amplitude=1;
-  let exitHeldSince=null,exitTimer=null,ending=false,frameError=null,frames=0;
+  let exitHeldSince=null,exitTimer=null,ending=false,frameError=null,frames=0,lastRenderedAt=0;
   const handWalk=typeof createQuestHandWalk==='function'?createQuestHandWalk({Vector3}):null;
   let handPauseUntil=0;
   renderer.xr.enabled = true;
@@ -43,6 +43,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     renderer.setAnimationLoop(null);
     handWalk?.reset();
     if(exitTimer!==null)globalThis.clearInterval?.(exitTimer);exitTimer=null;exitHeldSince=null;ending=false;
+    window.removeEventListener?.('error',onSessionError);
+    window.removeEventListener?.('unhandledrejection',onSessionError);
     panel?.dispose();panel=null;
     for(const item of handVisuals){item.visual.dispose();rig.remove(item.hand);}handVisuals.length=0;
     for(const pointer of pointers)pointer?.dispose();pointers.length=0;
@@ -98,6 +100,18 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     if(exitHeldSince===null)exitHeldSince=now;
     if(now-exitHeldSince>=1500){void exitVR();return true;}
     return false;
+  }
+  function recover(error) {
+    if(!active||ending)return;
+    frameError=error?.message||String(error);console.error('Casas 3D VR:',error);
+    void exitVR().then(()=>{status.textContent='O passeio foi interrompido. Recarregue a página e entre novamente em VR.';});
+  }
+  function onSessionError(event) {recover(event.error||event.reason||event.message||'Erro na sessão VR');}
+  function monitorSession() {
+    const now=performance.now();if(checkExit(now)||!active)return;
+    // The Meta menu and removing the headset intentionally suspend XR frames.
+    if(session.visibilityState&&session.visibilityState!=='visible'){lastRenderedAt=now;return;}
+    if(now-lastRenderedAt>20000)recover(new Error(frames===0?'A imagem VR não iniciou.':'A imagem VR parou de atualizar.'));
   }
   function putVisitorAt(point) {
     const physics=getPhysics();camera.getWorldPosition(head);
@@ -212,13 +226,13 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     renderer.info.reset();
     renderer.render(scene,camera);
     frames++;
+    lastRenderedAt=performance.now();
   }
   function safeFrame(time,xrFrame) {
     try {frame(time,xrFrame);}
     catch(error) {
-      frameError=error?.message||String(error);console.error('Casas 3D VR:',error);
       // A frame failure must return to the browser instead of trapping a black session.
-      void exitVR().then(()=>{status.textContent='O passeio foi interrompido. Recarregue a página e entre novamente em VR.';});
+      recover(error);
     }
   }
 
@@ -238,7 +252,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     }
     try {
       // Must be called directly from the user's click, before asynchronous setup.
-      session=await navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor'],optionalFeatures:['bounded-floor','hand-tracking']});
+      session=await navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor'],optionalFeatures:['bounded-floor','hand-tracking','layers']});
       if (airLink) status.textContent='Preparando a casa para os óculos…';
       prepare();
       saved={parent:camera.parent,position:camera.position.clone(),quaternion:camera.quaternion.clone(),scale:camera.scale?.clone(),enabled:controls.enabled,shadows:renderer.shadowMap.enabled};
@@ -260,17 +274,20 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       openPanelNextFrame=!!panel;
       session.addEventListener('end',finish,{once:true});
       lastTime=null; lastSafeHead=null; active=true;
+      lastRenderedAt=performance.now();
+      window.addEventListener?.('error',onSessionError);
+      window.addEventListener?.('unhandledrejection',onSessionError);
       document.body.classList.add('in-vr');
+      exitTimer=globalThis.setInterval?.(monitorSession,100)??null;
       if (airLink) status.textContent='Conectando a imagem da casa aos óculos…';
       await renderer.xr.setSession(session);
       renderer.xr.setFoveation(1);
-      // Request a sustainable refresh rate only when the runtime advertises it.
-      if(typeof questProfile!=='undefined'&&questProfile.lightweight&&session.supportedFrameRates?.includes(72)) {
-        try { await session.updateTargetFrameRate(72); } catch { /* Runtime keeps its supported default. */ }
-      }
       if(!active)return;
       renderer.setAnimationLoop(safeFrame);
-      exitTimer=globalThis.setInterval?.(()=>checkExit(performance.now()),100)??null;
+      // Optional refresh-rate negotiation must never hold the first rendered frame.
+      if(typeof questProfile!=='undefined'&&questProfile.lightweight&&session.supportedFrameRates?.includes(72)) {
+        try {void session.updateTargetFrameRate(72).catch(()=>{});}catch{}
+      }
       pending=false; button.disabled=false; button.textContent='Sair do VR';
       status.textContent='Minha casa: opções dentro dos óculos · Gatilho ou pinça: escolher · B/Y: painel · Analógicos: andar e girar';
     } catch(error) {

@@ -25,7 +25,8 @@ Air Link, Link, servidor local ou assinatura depois da publicação.
 Os modelos são gerados no próprio `Casas3D.html`; não existem GLBs externos.
 Os módulos legíveis `walk-*.js` e `quest-*.js` são a fonte dos recursos de passeio.
 Edite esses arquivos e execute `npm run build` e `npm test` com Node 22 ou superior.
-O build sincroniza os módulos e gera `dist/index.html`, sem dependências externas.
+O build sincroniza os módulos e gera `dist/index.html` e um arquivo JavaScript
+com nome versionado, sem dependências externas. Publique sempre a pasta `dist` inteira.
 Envie as alterações para a branch `main`: o GitHub Actions publica a atualização.
 Depois, recarregue a página nos óculos. Escolhas de planta/fachada ficam salvas
 somente no navegador de cada aparelho; não alteram a configuração dos outros clientes.
@@ -35,8 +36,15 @@ somente no navegador de cada aparelho; não alteram a configuração dos outros 
 Use um repositório **público** no GitHub Free. Em Settings → Pages → Source,
 selecione GitHub Actions. O workflow `.github/workflows/pages.yml` publica apenas
 `dist`, com HTTPS fornecido pelo GitHub. O endereço é informado pelo job Publicar.
-Todos os recursos estão incorporados no HTML: funciona sob `/casas-3d/` ou outro
-nome de repositório, sem configurar Vite/base. Não há Vite neste projeto.
+A página inicial é pequena e mostra a barra enquanto baixa o aplicativo. Modelos e
+texturas estão incorporados no JavaScript da mesma publicação. Os caminhos relativos
+funcionam sob `/casas-3d/` ou outro nome de repositório, sem configurar Vite/base.
+O arquivo local `Casas3D.html` continua completo e portátil. Não há Vite neste projeto.
+
+A barra acompanha os bytes recebidos e as etapas de preparação; chega a 100% somente
+depois do primeiro quadro renderizado. Se o download falhar, aparece Tentar novamente.
+Na sessão VR, erros de execução ou 20 segundos sem imagem, com o headset ativo,
+encerram o passeio e retornam ao navegador. Abrir o menu Meta pausa esse monitoramento.
 
 Para revisão local: `npm run dev`. Para revisar o build: `npm run preview`.
 Para conferir a publicação com Chrome no Windows:
