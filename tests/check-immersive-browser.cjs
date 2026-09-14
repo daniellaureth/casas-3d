@@ -33,7 +33,8 @@ function installXR(){
   const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,userGesture:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result?.value;};
   await send('Runtime.enable');await send('Emulation.setUserAgentOverride',{userAgent:'Mozilla/5.0 (Linux; Android 12; Quest 3S) OculusBrowser/40.0 Chrome/152.0.0.0'});await send('Page.addScriptToEvaluateOnNewDocument',{source:'('+installXR.toString()+')()'});
   await send('Page.navigate',{url:'http://127.0.0.1:'+server.address().port+'/'});
-  for(let i=0;i<120;i++){if(await evaluate('window.CasaLoading?.state.done'))break;await delay(100);}
+  for(let i=0;i<600;i++){if(await evaluate('window.CasaLoading?.state.done'))break;await delay(100);}
+  assert.equal(await evaluate('window.CasaLoading?.state.done'),true,'application boot completed');
   console.log('Boot',JSON.stringify(await evaluate('window.CasaLoading?.state')),JSON.stringify(errors));
   await delay(600);await evaluate('holdXRCompile();document.getElementById("quest-vr").click()');
   let loadingSeen=false;for(let i=0;i<100;i++){const vr=await evaluate('casaDebug().vr');if(vr.loading===75){assert.equal(vr.panelOpen,false);const shot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-loading.png'),Buffer.from(shot.data,'base64'));loadingSeen=true;break;}await delay(25);}assert.ok(loadingSeen,'loading is actually drawn inside XR');
@@ -43,7 +44,26 @@ function installXR(){
   assert.deepEqual(errors,[]);assert.equal(state.debug.vr.active,true);assert.ok(state.debug.vr.frames>10);assert.equal(state.eyes.length,2);
   await evaluate('testSession.inputSources=[{targetRaySpace:{},handedness:"right",targetRayMode:"tracked-pointer",profiles:["oculus-touch-v3"],gamepad:{axes:[0,0,0,0],buttons:[]}}];testSession.dispatchEvent(Object.assign(new Event("inputsourceschange"),{added:testSession.inputSources,removed:[]}));pointXR("facade-1")');await delay(100);
   await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');await delay(200);assert.notEqual(await evaluate('casaDebug().facade'),state.debug.facade);
-  await evaluate('pointXR("close")');await delay(50);await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');assert.equal(await evaluate('casaDebug().vr.panelOpen'),false);
+  if(process.argv.includes('--experiences')){
+    const click=async id=>{await evaluate('pointXR('+JSON.stringify(id)+')');await delay(40);await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');};
+    const waitFor=async expression=>{for(let i=0;i<400;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out: '+expression+' '+JSON.stringify(await evaluate('casaDebug()')));};
+    const menu=async()=>{await evaluate('testSession.inputSources[0].gamepad.buttons[5]={pressed:true}');await delay(50);await evaluate('testSession.inputSources[0].gamepad.buttons[5].pressed=false');await delay(50);};
+    await click('tab-passeio');const before=await evaluate('casaDebug()');await click('night');await delay(150);assert.ok((await evaluate('casaDebug().nightMix'))>0);assert.ok((await evaluate('casaDebug().nightMix'))<1);await waitFor('casaDebug().nightMix===1');
+    const night=await evaluate('casaDebug()');assert.equal(night.resources.lights,before.resources.lights);assert.equal(night.resources.geometries,before.resources.geometries);assert.equal(night.resources.textures,before.resources.textures);
+    const dark=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-night.png'),Buffer.from(dark.data,'base64'));
+    await click('day');await waitFor('casaDebug().nightMix===0');
+    await click('tab-tour');await click('tour-start');assert.equal(await evaluate('casaDebug().automaticTour.active'),true);
+    await waitFor('casaDebug().automaticTour.phase!=="planning"');await menu();await click('tour-pause');const paused=await evaluate('casaDebug().vr.head');await delay(250);assert.deepEqual(await evaluate('casaDebug().vr.head'),paused);
+    await click('tour-resume');assert.equal(await evaluate('casaDebug().automaticTour.paused'),false);
+    await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),1);
+    await click('tour-previous');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),0);
+    await click('tab-passeio');await click('night');await waitFor('casaDebug().nightMix===1');assert.equal(await evaluate('casaDebug().automaticTour.active'),true);
+    await click('tab-tour');await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
+    await click('tour-start');await evaluate('testSession.end()');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
+    await evaluate('document.getElementById("quest-vr").click()');await waitFor('casaDebug().vr.active&&casaDebug().vr.panelOpen');assert.equal(await evaluate('casaDebug().nightMix'),1);assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
+    console.log('VR experiences',JSON.stringify({day:before,night,after:await evaluate('casaDebug()')}));
+  }
+  if(!process.argv.includes('--experiences')){await evaluate('pointXR("close")');await delay(50);await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');assert.equal(await evaluate('casaDebug().vr.panelOpen'),false);}
   assert.deepEqual(errors,[]);await evaluate('testSession.end()');assert.equal(await evaluate('casaDebug().vr.active'),false);await send('Browser.close');
  }finally{ws?.close();browser.kill();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

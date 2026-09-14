@@ -26,6 +26,42 @@ O botão Sair do VR funciona também durante essa preparação.
 
 ## Atualizar
 
+### Tour automático e Dia/Noite
+
+Na barra superior, **Tour automático** inicia o passeio em primeira pessoa.
+O painel **Tour da casa** mostra o ambiente, Pausar, Continuar, Próximo ambiente,
+Ambiente anterior e Encerrar tour. No computador, P pausa/continua e Esc encerra.
+No VR, abra **Minha casa → Tour**. Durante o passeio, o botão Minha casa se transforma
+no painel compacto do tour; **Opções** reabre o menu completo.
+
+O tour movimenta apenas a base do jogador, a 0,85 m/s, com aceleração e parada suaves.
+A cabeça continua livre. Caminhada manual e giro pelo analógico ficam suspensos até
+encerrar o tour; menu e saída do VR continuam disponíveis. As portas necessárias
+abrem automaticamente, respeitando as colisões. Curvas fechadas usam um breve fade.
+Sair do VR ou trocar a planta encerra o tour. Abrir o menu do sistema Meta suspende
+o avanço enquanto a sessão estiver sem foco.
+
+Edite **`tour-config.js`** para ajustar o percurso: `stops` define a ordem dos
+ambientes, `room` busca o nome na planta e `label` define o texto exibido. Ambientes
+ausentes são ignorados. `u` e `v` escolhem a posição proporcional dentro do cômodo
+(0 a 1); `x` e `z` substituem essa posição por coordenadas em metros no mundo.
+O percurso procura posições livres e contorna móveis e paredes. `dwell` define
+os segundos em cada parada (padrão 4), `speed` a velocidade e `start: 'entry'`
+força o início pela entrada; o padrão `nearest` começa no ambiente mais próximo.
+Exemplo de ajuste só para a planta de 50 m²:
+
+```js
+models: { '50': { kitchen: { u: 0.5, v: 0.7, dwell: 5 } } }
+```
+
+**☀ Dia / 🌙 Noite** ficam na barra superior e em **Minha casa → Passeio** no VR.
+A mudança leva 1,8 segundo e funciona também durante o tour. O modo Noite escurece
+o céu e o exterior e usa cores quentes nos interiores, sem acrescentar luzes,
+sombras ou pós-processamento. As cores da iluminação do Quest são preparadas uma
+vez por geometria; a transição altera um único valor compartilhado pelos shaders.
+O cálculo das rotas usa um Worker local para preservar a resposta da renderização.
+Nenhum servidor adicional ou serviço externo é necessário.
+
 Os modelos são gerados no próprio `Casas3D.html`; não existem GLBs externos.
 Os módulos legíveis `walk-*.js` e `quest-*.js` são a fonte dos recursos de passeio.
 Edite esses arquivos e execute `npm run build` e `npm test` com Node 22 ou superior.

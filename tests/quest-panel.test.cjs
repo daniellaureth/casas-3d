@@ -16,7 +16,7 @@ function panelFixture(){
   const state={model:'50',models:['50','60','62','69'].map(value=>({value,label:value+' m²'})),modelDescription:'50 m² · 2 quartos',facades:['Contemporânea','Madeira natural','Urbana grafite','Minimalista areia','Clássica clean'],facade:0,high:false,garage:true,garageSpaces:1,twoSpaces:false,width:12,depth:21,furniture:true,evening:false,boundary:true,amplitude:1,destinations:[{id:'entry',name:'Entrada'}]};
   const scene=new T.Group(),camera=new T.Group();camera.position.y=1.65;scene.add(camera);
   const changes=[],moves=[];
-  const panel=context.api.createQuestPanel({...T,scene,camera,getState:()=>state,change(key,value){changes.push([key,value]);state[key]=value;return '';},navigate(id){moves.push(id);},door:()=>true});
+  const panel=context.api.createQuestPanel({...T,scene,camera,getState:()=>state,getTourState:()=>state.tour,change(key,value){changes.push([key,value]);if(key!=='tour')state[key]=value;return '';},navigate(id){moves.push(id);},door:()=>true});
   panel.open(new T.Vector3(0,1.65,0),new T.Vector3(0,0,-1));
   function select(id){
     const item=panel.buttons.find(b=>b.id===id);assert.ok(item,id+' exists');
@@ -38,11 +38,26 @@ test('stereo panel choices work by ray and unavailable garage choices cannot app
 });
 test('every panel control stays within the canvas and hand pinch uses the same ray hit path',()=>{
   const f=panelFixture();
-  for(const tab of ['casa','terreno','passeio','visao']){
+  for(const tab of ['casa','terreno','passeio','visao','tour']){
     f.select('tab-'+tab);for(const b of f.panel.buttons)assert.ok(b.x>=0&&b.y>=0&&b.x+b.w<=1040&&b.y+b.h<=710,b.id+' bounds');
   }
   const backwardRay=new T.Group();backwardRay.position.set(0,1.65,0);backwardRay.rotation.y=Math.PI;
   assert.equal(f.panel.select(backwardRay),false);f.panel.dispose();
+});
+
+test('day/night and compact tour buttons receive controller rays in the existing menu',()=>{
+  const f=panelFixture();f.select('tab-passeio');f.select('night');assert.equal(f.state.night,true);f.select('day');assert.equal(f.state.night,false);
+  f.select('tab-tour');f.select('tour-start');assert.deepEqual(f.changes.at(-1),['tour','start']);
+  f.state.tour={active:true,paused:false,label:'Sala de estar',revision:1};f.panel.close();f.panel.update([],'');
+  const children=f.camera.children.length,sceneChildren=f.scene.children.length;
+  function selectDock(index,action){
+    const point=f.panel.dock.localToWorld(new T.Vector3(((20+index*198+92)/1024-.5)*.78,(.5-246/320)*.24,0));
+    const ray=new T.Group();ray.position.copy(f.camera.position);ray.quaternion.setFromUnitVectors(new T.Vector3(0,0,-1),point.sub(ray.position).normalize());ray.updateMatrixWorld(true);
+    assert.equal(f.panel.hit(ray).button.id,'dock-tour-'+action);assert.equal(f.panel.select(ray),true);assert.deepEqual(f.changes.at(-1),['tour',action]);
+  }
+  selectDock(0,'pause');f.state.tour.paused=true;f.state.tour.revision++;f.panel.update([],'');selectDock(1,'resume');
+  selectDock(2,'next');selectDock(3,'previous');selectDock(4,'stop');
+  assert.equal(f.camera.children.length,children);assert.equal(f.scene.children.length,sceneChildren);f.panel.dispose();
 });
 test('safe destinations respect room bounds and avoid new furniture and walls',()=>{
   const physics={radius:.2,spawn:{x:5,z:5},blocked:(x,z)=>Math.abs(x)<.4&&Math.abs(z)<.4};

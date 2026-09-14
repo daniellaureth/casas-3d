@@ -52,7 +52,7 @@ test('walking uses the same lighting path when moving, idle, or editing',()=>{
   const renders=[],scene={},overlay={},camera={};
   let moving=false;
   const frameContext=vm.createContext({
-    Br:0,document:{hidden:false},questMode:null,Io:0,yi:false,fs:false,Xe:0,Vn:false,Un:1,Zn:true,hn:100,Be:100,De:null,
+    Br:0,document:{hidden:false},questMode:null,houseTour:null,dayNight:null,updateDesktopExperience:()=>false,Io:0,yi:false,fs:false,Xe:0,Vn:false,Un:1,Zn:true,hn:100,Be:100,De:null,
     dc(){},walkMode:{active:true,update:()=>moving},xe:{update:()=>false},Bx:true,Eo:'current',gs:'current',ue:{visible:false},bn:{visible:true},$i:true,
     Tn:scene,qs:overlay,Je:camera,
     ee:{shadowMap:{needsUpdate:false},info:{reset(){},render:{calls:1,triangles:1}},render(s){if(s===scene)renders.push('direct');}},

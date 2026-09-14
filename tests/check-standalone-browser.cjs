@@ -38,6 +38,31 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
       // Exercise every existing facade and return to the default.
       for(let i=0;i<5;i++){await evaluate(`document.querySelectorAll('.facade-choice')[${i}].click()`);await delay(350);}
       await evaluate("document.querySelectorAll('.facade-choice')[0].click()");await settled();
+      if(process.argv.includes('--experiences')){
+        const click=id=>evaluate('document.getElementById('+JSON.stringify(id)+').click()');
+        const waitFor=async expression=>{for(let i=0;i<600;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out '+expression);};
+        const day=await evaluate('casaDebug()');await click('night');await delay(200);
+        assert.ok(await evaluate('casaDebug().nightMix>0 && casaDebug().nightMix<1'),'smooth night transition');
+        await waitFor('casaDebug().nightMix===1');const night=await evaluate('casaDebug()');
+        assert.deepEqual(night.resources,day.resources,'night reuses lights, geometry, textures and shader programs');
+        const dark=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-night-'+(quest?'quest':'desktop')+'.png'),Buffer.from(dark.data,'base64'));
+        await click('day');await waitFor('casaDebug().nightMix===0');
+        await click('auto-tour');await waitFor('casaDebug().automaticTour.phase!=="planning"');
+        assert.equal(await evaluate('casaDebug().walking'),true,'tour starts from overview in first person');
+        assert.equal(await evaluate('document.getElementById("tour-hud").hidden'),false);
+        await click('tour-pause');const paused=await evaluate('casaDebug().camera');await delay(250);assert.deepEqual(await evaluate('casaDebug().camera'),paused);
+        await click('tour-resume');assert.equal(await evaluate('casaDebug().automaticTour.paused'),false);
+        const index=await evaluate('casaDebug().automaticTour.index');await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),index+1);
+        await click('tour-previous');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),index);
+        await click('night');await waitFor('casaDebug().nightMix===1');assert.equal(await evaluate('casaDebug().automaticTour.active'),true);
+        const hud=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-tour-'+(quest?'quest':'desktop')+'.png'),Buffer.from(hud.data,'base64'));
+        await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);assert.equal(await evaluate('casaDebug().walking'),true,'normal first-person controls restored');
+        await click('auto-tour');await waitFor('casaDebug().automaticTour.phase!=="planning"');
+        await evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape"}))');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
+        await evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape"}))');assert.equal(await evaluate('casaDebug().walking'),false);
+        await click('day');await waitFor('casaDebug().nightMix===0');await settled();
+        report.push({quest,experiences:'passed',day:day.resources,night:night.resources,drawCalls:{day:day.frame.calls,night:night.frame.calls}});
+      }
       const shot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-'+(source?'source-':'production-')+(quest?'quest':'desktop')+'.png'),Buffer.from(shot.data,'base64'));
       assert.deepEqual(errors,[],'no console, network or WebGL errors');
     }

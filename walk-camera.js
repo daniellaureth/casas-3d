@@ -1,5 +1,5 @@
 // Included inline in Casas3D.html so the portable application works offline.
-function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, resize, invalidate, getPlan, getPhysics = () => null }) {
+function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, resize, invalidate, getPlan, getPhysics = () => null,getTour=()=>null }) {
   const button = document.getElementById('walk');
   const settingsButton = document.getElementById('walk-settings');
   const hint = document.querySelector('.hint');
@@ -42,6 +42,7 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
 
   function stop() {
     if (!active) return;
+    if(getTour()?.state.active)getTour().stop();
     active = false;
     settingsOpen = false;
     requestId++;
@@ -67,7 +68,8 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
     hint.textContent = 'Mova o mouse sobre a casa para olhar · WASD ou setas para andar · Esc para sair';
   }
 
-  function start() {
+  function start({capture=true}={}) {
+    if(active)return;
     stopTour();
     saved = {
       position: camera.position.clone(), quaternion: camera.quaternion.clone(),
@@ -91,7 +93,7 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
     resize();
     look();
     // Request during the activation click: no extra click or held button is needed.
-    captureMouse();
+    if(capture)captureMouse();
   }
 
   button.onclick = () => active ? stop() : start();
@@ -106,7 +108,7 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
     if (!active) return;
     const editing = event.target?.matches?.('input, select, textarea, [contenteditable="true"]');
     if (event.code === 'Tab' && !editing) { event.preventDefault(); if (!event.repeat) showSettings(!settingsOpen); return; }
-    if (event.code === 'Escape') { event.preventDefault(); stop(); return; }
+    if (event.code === 'Escape') { event.preventDefault();if(getTour()?.state.active)getTour().stop();else stop(); return; }
     if (settingsOpen || editing) return;
     if (event.code === 'KeyE') {
       event.preventDefault();
@@ -123,7 +125,7 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
     if (keys.delete(event.code)) invalidate();
   });
   document.addEventListener('pointerlockchange', () => {
-    if (active && !settingsOpen && document.pointerLockElement !== canvas) stop();
+    if (active && !settingsOpen && !getTour()?.state.active && document.pointerLockElement !== canvas) stop();
     else if (!active && document.pointerLockElement === canvas) document.exitPointerLock();
   });
   document.addEventListener('pointerlockerror', () => fallback(requestId));
@@ -134,6 +136,8 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
     get active() { return active; },
     get settingsOpen() { return settingsOpen; },
     showSettings,
+    start,
+    releaseForTour(){settingsOpen=false;keys.clear();document.body.classList.remove('walk-settings-open');if(document.pointerLockElement===canvas)document.exitPointerLock();},
     stop,
     refreshHouse() {
       if (!active) return;
@@ -158,6 +162,8 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
     },
     update(delta) {
       if (!active) return false;
+      const tour=getTour();
+      if(tour?.state.active){tour.update(camera.position,delta);const moved=getPhysics()?.update(delta,camera.position);const result=changed||moved||!tour.state.paused;changed=false;return result;}
       if (settingsOpen) {
         hint.textContent = 'Edite a casa no painel · Voltar ao passeio para continuar · Esc para sair';
         const result = changed; changed = false; return result;

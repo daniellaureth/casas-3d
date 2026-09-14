@@ -55,7 +55,7 @@ if (!html.includes('id="walk-settings"')) {
   replaceOnce('boundaryVisible:()=>et("boundary").checked}),dc(hn)}function lc', 'boundaryVisible:()=>et("boundary").checked}),walkMode?.refreshHouse(),dc(hn)}function lc');
   replaceOnce('</style>', '\n#walk-settings{display:none}.walking #walk-settings{display:block!important}.walking.walk-settings-open aside{display:block;bottom:85px;max-height:calc(100vh - 120px)}#walk-message{font-size:11px;line-height:1.4;color:#53664a}.walking.walk-settings-open .hint{max-width:calc(100% - 32px)}\n</style>');
 }
-const parts = ['walk-layout.js', 'walk-physics.js', 'walk-camera.js'];
+const parts = ['walk-layout.js', 'walk-physics.js', 'walk-camera.js','tour-config.js','house-tour.js','tour-worker.js','day-night.js'];
 if (!html.includes('if(walkMode?.active||questMode?.active)return;')) {
   replaceOnce('function As(i=!1){if(walkMode?.active)return;', 'function As(i=!1){if(walkMode?.active||questMode?.active)return;');
   replaceOnce('function lc(){ee.setSize', 'function lc(){if(questMode?.active)return;ee.setSize');
@@ -66,8 +66,8 @@ const start = html.indexOf('// BEGIN NAVIGATION MODULES');
 const end = html.indexOf('</script>', start >= 0 ? start : oldStart);
 if (end < 0 || (start < 0 && oldStart < 0)) throw new Error('Missing inline navigation boundary');
 if (fs.existsSync(path.join(__dirname, 'quest-vr.js'))) parts.push('quest-vr.js');
-const setup = `walkMode=createWalkCamera({camera:Je,controls:xe,canvas:ee.domElement,stopTour:ke,finishHouse(){ji(100);hn=100;Vn=false;Xe=0;et("xray").setAttribute("aria-pressed","false");De=null;Bn=null;dc(100);},resize:lc,invalidate:Gn,getPlan:()=>ue.userData.plan,getPhysics:()=>walkPhysics});`;
+const setup = `walkMode=createWalkCamera({camera:Je,controls:xe,canvas:ee.domElement,stopTour:ke,finishHouse(){ji(100);hn=100;Vn=false;Xe=0;et("xray").setAttribute("aria-pressed","false");De=null;Bn=null;dc(100);},resize:lc,invalidate:Gn,getPlan:()=>ue.userData.plan,getPhysics:()=>walkPhysics,getTour:()=>houseTour});`;
 const questSetup = fs.existsSync(path.join(__dirname, 'quest-setup.js')) ? fs.readFileSync(path.join(__dirname, 'quest-setup.js'), 'utf8') : '';
-html = html.slice(0, start >= 0 ? start : oldStart) + '// BEGIN NAVIGATION MODULES\n' + parts.map(p => fs.readFileSync(path.join(__dirname, p), 'utf8')).join('\n') + '\n' + setup + '\n' + questSetup + '\n// END NAVIGATION MODULES\n' + html.slice(end);
+html = html.slice(0, start >= 0 ? start : oldStart) + '// BEGIN NAVIGATION MODULES\n' + parts.map(p => fs.readFileSync(path.join(__dirname, p), 'utf8')).join('\n') + '\n' + setup + '\n' + questSetup + '\n'+fs.readFileSync(path.join(__dirname,'house-experiences.js'),'utf8')+'\n// END NAVIGATION MODULES\n' + html.slice(end);
 fs.writeFileSync(file, html);
 console.log('Portable navigation updated.');

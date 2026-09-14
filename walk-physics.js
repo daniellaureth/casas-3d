@@ -28,6 +28,9 @@ function createWalkPhysics({ boxes = [], floors = [], doors = [], radius = 0.20,
   function blocked(x, z, feet = floorAt(x, z)) {
     return boxes.some(b => b.top > feet + 0.20 && b.bottom < feet + eyeHeight + 0.1 && overlaps(x, z, b)) || doors.some(d => hitsDoor(x, z, d));
   }
+  function blockedForTour(x,z){const feet=floorAt(x,z);
+    return boxes.some(b=>b.top>feet+.20&&b.bottom<feet+eyeHeight+.1&&overlaps(x,z,b))||doors.some(d=>hitsDoor(x,z,d,d.openAngle));
+  }
   function headBlocked(x,z,y=floorAt(x,z)+eyeHeight) {
     const padding=.025;
     return boxes.some(b=>b.kind!=='furniture'&&b.top>y-padding&&b.bottom<y+padding&&overlaps(x,z,b,padding)) ||
@@ -136,7 +139,7 @@ function createWalkPhysics({ boxes = [], floors = [], doors = [], radius = 0.20,
     if (moving) onChange();
     return moving;
   }
-  return { boxes, floors, doors, radius, eyeHeight, floorAt, blocked, headBlocked, headPathBlocked, move, nearestDoor, interact, raycastDoor, interactRay, update, hitsDoor, doorBox };
+  return { boxes, floors, doors, radius, eyeHeight, floorAt, blocked, blockedForTour, headBlocked, headPathBlocked, move, nearestDoor, interact, raycastDoor, interactRay, update, hitsDoor, doorBox };
 }
 
 function attachWalkDoorPart(leaf, part) {

@@ -16,13 +16,14 @@ function fixture(model='50',panelFactory,extra={}) {
   renderer.setAnimationLoop=fn=>renderer.xr.setAnimationLoop(fn);
   renderer.render=()=>{scene.updateMatrixWorld();renderer.xr.updateCamera(camera);};
   const mode=T.createQuestVR({...T,renderer,scene,camera,controls,airLink:false,makeCurtain:()=>{curtain=new T.Group();return curtain;},prepare(){},restore(){},invalidate(){},getPhysics:()=>physics,createPanel:panelFactory,...extra});
-  function tick(time,{x=0,y=1.7,z=0,yaw=0,tracked=true}={}) {
+  function tick(time,{x=0,y=1.7,z=0,yaw=0,pitch=0,roll=0,tracked=true}={}) {
     clock=time;
     const projection=new T.PerspectiveCamera(90,1,.1,500).projectionMatrix.toArray();
     const rotation=new T.Quaternion().setFromAxisAngle(new T.Vector3(0,1,0),yaw);
+    rotation.multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(1,0,0),pitch)).multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0,0,1),roll));
     const views=['left','right'].map(eye=>({eye,projectionMatrix:projection,transform:{matrix:new T.Matrix4().compose(new T.Vector3(x+(eye==='left'?-.032:.032),y,z),rotation,new T.Vector3(1,1,1)).toArray()}}));
     callback(time,{getViewerPose:()=>tracked?{views}:null});
-    return {head:camera.getWorldPosition(new T.Vector3()).toArray(),curtain:curtain.visible,rig:camera.parent?.position.toArray()};
+    return {head:camera.getWorldPosition(new T.Vector3()).toArray(),curtain:curtain.visible,rig:camera.parent?.position.toArray(),tracking:rotation};
   }
   return {mode,tick,physics,camera,session,renderer,errors,advanceClock(ms){clock+=ms;monitor?.();}};
 }
@@ -32,6 +33,22 @@ test('real Three XR manager keeps a stationary tracked head outside walls',async
     for(let i=0;i<10;i++) {const state=f.tick(i*14,{x:2,z:3});assert.equal(state.curtain,false,model+' '+JSON.stringify(state));}
     await f.mode.end();assert.equal(f.camera.fov,38);assert.equal(f.camera.zoom,1);
   }
+});
+
+test('automatic VR travel leaves head yaw, pitch and roll tracked and ignores manual locomotion',async()=>{
+  let updates=0;const tour={state:{active:false,paused:false,fade:0},update(position,dt){updates++;if(!this.state.paused)position.x+=dt*.3;},stop(){this.state.active=false;}};
+  const f=fixture('50',undefined,{getTour:()=>tour});await f.mode.enter();f.tick(0);tour.state.active=true;
+  f.session.inputSources=[{handedness:'left',gamepad:{buttons:[],axes:[0,0,1,1]}},{handedness:'right',gamepad:{buttons:[],axes:[0,0,1,1]}}];
+  const rigRotation=f.camera.parent.quaternion.clone(),initial=f.camera.parent.position.clone();
+  for(let i=1;i<=8;i++){
+    const result=f.tick(i*14,{yaw:i*.07,pitch:-i*.025,roll:i*.01});
+    assert.ok(f.camera.quaternion.angleTo(result.tracking)<1e-7,'native head orientation preserved');
+    assert.ok(f.camera.parent.quaternion.angleTo(rigRotation)<1e-7,'manual snap turn suppressed');
+  }
+  assert.ok(updates>0);assert.ok(f.camera.parent.position.x>initial.x);assert.ok(Math.abs(f.camera.parent.position.z-initial.z)<1e-7,'manual walking suppressed');
+  tour.state.paused=true;const paused=f.camera.parent.position.clone();f.tick(140,{yaw:1,pitch:.4,roll:.2});assert.ok(f.camera.parent.position.distanceTo(paused)<1e-7);
+  f.session.visibilityState='visible-blurred';const count=updates;f.tick(160);assert.equal(updates,count,'system menu suspends tour');
+  await f.mode.end();assert.equal(tour.state.active,false);await f.mode.enter();f.tick(200);assert.equal(tour.state.active,false);await f.mode.end();assert.deepEqual(f.errors,[]);
 });
 test('the exit panel remains selectable while wall protection covers the house',async()=>{
   let options;

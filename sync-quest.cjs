@@ -25,6 +25,6 @@ patch('a.map(u=>l[u]?.uuid),l.color?.getHex(),','a.map(u=>questProfile.lightweig
 patch('e.set(c,{material:l,geometries:[]','e.set(c,{material:questProfile.lightweight?questBatchMaterial(l):l,geometries:[]');
 patch('d.applyMatrix4(o.matrixWorld),e.get(c).geometries.push(d)','questProfile.lightweight&&questVertexColor(d,l),d.applyMatrix4(o.matrixWorld),e.get(c).geometries.push(d)');
 patch('function Nm(i){i?.traverse(t=>t.geometry?.dispose())}', 'function Nm(i){i?.traverse(t=>{t.geometry?.dispose();if(t.material?.userData.questBatchOwned)t.material.dispose()})}');
-patch('window.casaDebug=()=>({vr:', 'window.casaDebug=()=>({graphics:questProfile,shadows:ee.shadowMap.enabled,vr:');
+if(!html.includes('graphics:questProfile,shadows:ee.shadowMap.enabled,vr:'))patch('window.casaDebug=()=>({vr:', 'window.casaDebug=()=>({graphics:questProfile,shadows:ee.shadowMap.enabled,vr:');
 fs.writeFileSync(file,html);
 console.log('Quest graphics updated.');
