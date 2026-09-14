@@ -28,10 +28,10 @@ function createWalkPhysics({ boxes = [], floors = [], doors = [], radius = 0.20,
   function blocked(x, z, feet = floorAt(x, z)) {
     return boxes.some(b => b.top > feet + 0.20 && b.bottom < feet + eyeHeight + 0.1 && overlaps(x, z, b)) || doors.some(d => hitsDoor(x, z, d));
   }
-  function blockedForTour(x,z,ignoreFurniture=false){const feet=floorAt(x,z);
+  function blockedForTour(x,z,ignoreFurniture=false,tourEyeHeight=eyeHeight){const feet=floorAt(x,z);
     // Low furniture does not obstruct a flying viewpoint. Keep tall cupboards
     // out of the lens so the tour never places the camera inside their surfaces.
-    return boxes.some(b=>(!ignoreFurniture||b.kind!=='furniture'||b.top>feet+eyeHeight-.1)&&b.top>feet+.20&&b.bottom<feet+eyeHeight+.1&&overlaps(x,z,b))||doors.some(d=>hitsDoor(x,z,d,d.openAngle));
+    return boxes.some(b=>(!ignoreFurniture||b.kind!=='furniture'||b.top>feet+tourEyeHeight-.1)&&b.top>feet+.20&&b.bottom<feet+tourEyeHeight+.1&&overlaps(x,z,b))||doors.some(d=>hitsDoor(x,z,d,d.openAngle));
   }
   function headBlocked(x,z,y=floorAt(x,z)+eyeHeight) {
     const padding=.025;
@@ -150,7 +150,7 @@ function attachWalkDoorPart(leaf, part) {
 }
 
 function createHousePhysics(house, { Box3, onChange, boundaryVisible = () => true, furnitureVisible = () => true }) {
-  const boxes = [], floors = [], doors = [], plan = house.userData.plan;
+  const boxes = [], floors = [], doors = [], flightBoxes=[], plan = house.userData.plan;
   house.updateMatrixWorld(true);
   for (const [, x, z, w, d] of plan.rooms) floors.push({minX:x-plan.w/2,maxX:x+w-plan.w/2,minZ:plan.d/2-z-d,maxZ:plan.d/2-z,top:0.4025});
   house.traverse(mesh => {
@@ -182,10 +182,13 @@ function createHousePhysics(house, { Box3, onChange, boundaryVisible = () => tru
     let group = mesh;
     while (group.parent && group.parent !== house) group = group.parent;
     const index = house.userData.groups.indexOf(group);
-    if (![7, 8].includes(index)) return;
+    if (![6, 7, 8].includes(index)) return;
     mesh.geometry.computeBoundingBox();
     const bound = new Box3().copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld);
     const b = {minX:bound.min.x,maxX:bound.max.x,minZ:bound.min.z,maxZ:bound.max.z,bottom:bound.min.y,top:bound.max.y};
+    // Roofs/ceilings are flight obstacles only; normal walking stays unchanged.
+    if(index===6||(index===7&&b.bottom>=2.4))flightBoxes.push(b);
+    if(index===6)return;
     if (b.top <= 0.43 && b.top > 0.05 && b.maxX - b.minX > 0.3 && b.maxZ - b.minZ > 0.25) floors.push(b);
     // Include furniture, glass, walls, columns and closed site gates, but not ceilings or labels.
     if (b.top > 0.5 && b.bottom < 2.4 && b.maxX - b.minX > 0.008 && b.maxZ - b.minZ > 0.008) {
@@ -197,10 +200,12 @@ function createHousePhysics(house, { Box3, onChange, boundaryVisible = () => tru
     }
   });
   const physics = createWalkPhysics({boxes, floors, doors, onChange});
+  physics.flightBoxes=flightBoxes;
   const entry = doors.find(d => d.outer && d.names.some(name => /^Sala/.test(name)));
   physics.spawn = entry ? {x:entry.hingeX + entry.width / 2, z:entry.hingeZ + 2.4} : {x:0,z:plan.d/2+2.4};
   physics.site=house.userData.site;
+  physics.roofTop=new Box3().setFromObject(house).max.y;
   // Aerial tour segments stay above every roof and pergola.
-  physics.tourAltitude=Math.max(new Box3().setFromObject(house).max.y+1.5,(physics.site?.depth||0)*.7,(physics.site?.width||0)*.7);
+  physics.tourAltitude=Math.max(physics.roofTop+1.5,(physics.site?.depth||0)*.7,(physics.site?.width||0)*.7);
   return physics;
 }

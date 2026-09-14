@@ -7,7 +7,7 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
   const walkingKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
   let active = false, saved = null, yaw = 0, pitch = 0, changed = false;
   let requestId = 0;
-  let settingsOpen = false,tourLookIndex=-1,tourLookManual=false;
+  let settingsOpen = false,tourLookOffset=0,tourPitchOffset=0;
 
   function captureMouse() {
     const id = ++requestId;
@@ -100,7 +100,7 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
   if (settingsButton) settingsButton.onclick = () => showSettings(!settingsOpen);
   document.addEventListener('mousemove', event => {
     if (!active || settingsOpen || (document.pointerLockElement !== canvas && event.target !== canvas)) return;
-    if(getTour()?.state.active)tourLookManual=true;
+    if(getTour()?.state.active){tourLookOffset-=(event.movementX||0)*.002;tourPitchOffset-=(event.movementY||0)*.002;}
     yaw -= (event.movementX || 0) * 0.002;
     pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch - (event.movementY || 0) * 0.002));
     look();
@@ -135,10 +135,11 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
 
   return {
     get active() { return active; },
+    get heading() { return yaw; },
     get settingsOpen() { return settingsOpen; },
     showSettings,
     start,
-    releaseForTour(){settingsOpen=false;keys.clear();document.body.classList.remove('walk-settings-open');if(document.pointerLockElement===canvas)document.exitPointerLock();},
+    releaseForTour(resetLook=false){settingsOpen=false;keys.clear();document.body.classList.remove('walk-settings-open');if(resetLook){tourLookOffset=0;tourPitchOffset=0;}if(document.pointerLockElement===canvas)document.exitPointerLock();},
     stop,
     refreshHouse() {
       if (!active) return;
@@ -166,15 +167,13 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
       const tour=getTour();
       if(tour?.state.active){
         tour.update(camera.position,delta);
-        if(tourLookIndex!==tour.state.index){tourLookIndex=tour.state.index;tourLookManual=false;}
         const focus=tour.state.focus;
-        // Desktop aerial views frame the property. The XR rig never uses this:
-        // the headset retains its native orientation throughout the whole tour.
-        if(focus&&!tourLookManual&&!tour.state.paused){
+        // Match the seated framing on desktop while retaining mouse look offsets.
+        // Only the desktop camera tilts slightly; XR changes the base yaw only.
+        if(focus&&Number.isFinite(tour.state.heading)&&!tour.state.paused){
           const dx=focus.x-camera.position.x,dy=focus.y-camera.position.y,dz=focus.z-camera.position.z;
-          const wantedYaw=Math.atan2(-dx,-dz),wantedPitch=Math.atan2(dy,Math.hypot(dx,dz));
-          const angle=Math.atan2(Math.sin(wantedYaw-yaw),Math.cos(wantedYaw-yaw)),blend=tour.state.fade===1?1:Math.min(1,delta*1.2);
-          yaw+=angle*blend;pitch+=(wantedPitch-pitch)*blend;look();
+          const wantedPitch=Math.max(-.3,Math.min(.1,Math.atan2(dy,Math.hypot(dx,dz))))+tourPitchOffset,blend=tour.state.fade===1?1:Math.min(1,delta*1.2);
+          yaw=tour.state.heading+tourLookOffset;pitch=Math.max(-Math.PI/2+.01,Math.min(Math.PI/2-.01,pitch+(wantedPitch-pitch)*blend));look();
         }
         const moved=getPhysics()?.update(delta,null);const result=changed||moved||!tour.state.paused;changed=false;return result;
       }

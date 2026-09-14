@@ -8,7 +8,27 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   const head = new Vector3(), direction = new Vector3();
   // The tour follows a stable virtual body. Tracked head motion must not move
   // the route's arrival target or be canceled by translating the rig backwards.
-  const tourBody={x:0,y:0,z:0};let tourOwner=null;
+  const tourBody={x:0,y:0,z:0};let tourOwner=null,seatedHeadYaw=0;
+  const turnPivot=new Vector3(),turnAfter=new Vector3(),seatedEye=new Vector3();
+  function calibrateSeatedTour(){
+    camera.getWorldDirection(direction);
+    // Capture the seated forward direction once. Never chase sideways head turns.
+    seatedHeadYaw=Math.atan2(-direction.x,-direction.z)-rig.rotation.y;
+    camera.getWorldPosition(seatedEye);rig.worldToLocal(seatedEye);
+  }
+  function guideTourHeading(tour){
+    if(!Number.isFinite(tour?.state.heading))return;
+    const yaw=tour.state.heading-seatedHeadYaw;
+    const changed=Math.abs(yaw-rig.rotation.y)>=1e-8,c=Math.cos(yaw),s=Math.sin(yaw),scale=rig.scale.x;
+    // Anchor the neutral seated eye to the route, not the current sideways look.
+    // Turning around different live head poses would accumulate position drift.
+    rig.rotation.y=yaw;
+    rig.position.x=tourBody.x-scale*(c*seatedEye.x+s*seatedEye.z);
+    rig.position.z=tourBody.z-scale*(-s*seatedEye.x+c*seatedEye.z);
+    rig.position.y=tourBody.y-scale*seatedEye.y;
+    rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);
+    if(changed&&panel?.visible){camera.getWorldPosition(turnPivot);camera.getWorldDirection(turnAfter);panel.place?.(turnPivot,turnAfter);}
+  }
   const rayOrigin=new Vector3(),rayDirection=new Vector3();
   const rayControllers = [];
   const handVisuals=[],pointers=[];
@@ -16,7 +36,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   let exitHeldSince=null,exitTimer=null,ending=false,frameError=null,frames=0,lastRenderedAt=0;
   const handWalk=typeof createQuestHandWalk==='function'?createQuestHandWalk({Vector3}):null;
   let handPauseUntil=0;
-  let currentFoveation=1;
+  let currentFoveation=1,recoveryFade=0;
   let measuredSeconds=0,measuredFrames=0;
   let loading=null,loadPhase=null,compileReady=false,loadStarted=0,readyAt=0;
   renderer.xr.enabled = true;
@@ -137,11 +157,12 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   function tourCommand(action){
     if(loading)return 'Aguarde o carregamento do VR.';
     camera.getWorldPosition(head);const tour=getTour();
-    if(action==='start'||tourOwner!==tour){tourBody.x=head.x;tourBody.y=floorLevel+getPhysics().eyeHeight;tourBody.z=head.z;tourOwner=tour;}
+    if(action==='start'||tourOwner!==tour){tourBody.x=head.x;tourBody.y=head.y;tourBody.z=head.z;tourOwner=tour;calibrateSeatedTour();}
     const beforeX=tourBody.x,beforeY=tourBody.y,beforeZ=tourBody.z;
     try{
-      tour?.action(action,tourBody);
+      tour?.action(action,tourBody,rig.rotation.y+seatedHeadYaw);
       if(action==='stop'){
+        if(Math.hypot(tourBody.x-beforeX,tourBody.y-beforeY,tourBody.z-beforeZ)>.05)recoveryFade=1;
         rig.position.x+=tourBody.x-beforeX;rig.position.y+=tourBody.y-beforeY;rig.position.z+=tourBody.z-beforeZ;
         floorLevel=tourBody.y-getPhysics().eyeHeight;
         rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);camera.getWorldPosition(head);
@@ -158,6 +179,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       rig.scale.setScalar(1/amplitude);rig.updateMatrixWorld(true);camera.getWorldPosition(head);
       rig.position.x+=before.x-head.x;rig.position.y+=before.y-head.y;rig.position.z+=before.z-head.z;
       rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);
+      if(getTour()?.state.active&&tourOwner){seatedEye.set(tourBody.x,tourBody.y,tourBody.z);rig.worldToLocal(seatedEye);}
       return amplitude===1?'Escala visual normal.':'Sensação de espaço ampliada. As medidas do projeto não mudaram.';
     }
     if(getTour()?.state.active)getTour().stop('Casa alterada. Inicie novamente para recalcular o tour.');
@@ -235,7 +257,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     const tour=getTour();
     const automatic=!!tour?.state.active;
     if(!automatic)tourOwner=null;
-    else if(tourOwner!==tour){tourBody.x=head.x;tourBody.y=floorLevel+physics.eyeHeight;tourBody.z=head.z;tourOwner=tour;}
+    else if(tourOwner!==tour){tourBody.x=head.x;tourBody.y=head.y;tourBody.z=head.z;tourOwner=tour;calibrateSeatedTour();}
     if(panel?.visible||tour?.state.active)forward=right=turn=0;
     rig.updateMatrixWorld(true);
     const trackedHands=handVisuals.filter(item=>item.visual.update()).map(item=>item.hand);
@@ -254,6 +276,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       const moveX=body.x-fromX,moveZ=body.z-fromZ;
       rig.position.x += moveX; rig.position.z += moveZ;
       const nextFloor=body.y-physics.eyeHeight,moveY=nextFloor-floorLevel;rig.position.y+=moveY;floorLevel=nextFloor;
+      if(automatic)guideTourHeading(tour);
       if (Math.abs(turn)<0.25) snapReady=true;
       if (Math.abs(turn)>0.65 && snapReady) {
         snapReady=false;
@@ -264,7 +287,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
         const after=camera.getWorldPosition(new Vector3());
         rig.position.x+=before.x-after.x; rig.position.z+=before.z-after.z;
       }
-      lastSafeHead=automatic?{x:head.x+moveX,y:head.y+moveY,z:head.z+moveZ}:{x:body.x,y:body.y,z:body.z};
+      if(automatic){camera.getWorldPosition(turnAfter);lastSafeHead={x:turnAfter.x,y:turnAfter.y,z:turnAfter.z};}
+      else lastSafeHead={x:body.x,y:body.y,z:body.z};
       physics.update(delta,automatic?null:lastSafeHead);
     }
     rig.updateMatrixWorld(true);
@@ -280,7 +304,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       const hit=hits[i]||(!panel?.visible&&physics.raycastDoor?.(rayOrigin,rayDirection));
       pointer?.update(hit,amplitude);
     });
-    const fade=tour?.state.fade||0;if(curtain.material)curtain.material.opacity=curtain.visible?1:fade;curtain.visible=curtain.visible||fade>0;
+    const fade=Math.max(tour?.state.fade||0,recoveryFade);recoveryFade=Math.max(0,recoveryFade-delta/.35);
+    if(curtain.material)curtain.material.opacity=curtain.visible?1:fade;curtain.visible=curtain.visible||fade>0;
     renderer.info.reset();
     renderer.render(scene,camera);
     frames++;
@@ -318,7 +343,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       rig=new Group(); scene.add(rig); rig.add(camera);
       const p=getPhysics(), spawn=p.spawn;
       rig.position.set(spawn.x,p.floorAt(spawn.x,spawn.z),spawn.z);
-      floorLevel=p.floorAt(spawn.x,spawn.z);amplitude=1;menuPressed=false;exitHeldSince=null;ending=false;frameError=null;frames=0;
+      floorLevel=p.floorAt(spawn.x,spawn.z);amplitude=1;menuPressed=false;exitHeldSince=null;ending=false;frameError=null;frames=0;recoveryFade=0;
       handWalk?.reset();handPauseUntil=0;measuredSeconds=0;measuredFrames=0;
       camera.position.set(0,0,0); camera.rotation.set(0,0,0); camera.clearViewOffset();
       curtain=makeCurtain(); curtain.visible=false; camera.add(curtain);

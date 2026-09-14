@@ -35,35 +35,49 @@ No VR, use o botão verde **Tour automático** no painel inicial. Ele também ap
 em todas as abas; **Minha casa → Tour** reúne os controles completos. Durante o passeio, o botão Minha casa se transforma
 no painel compacto do tour; **Opções** reabre o menu completo.
 
-O tour movimenta apenas a base do jogador, a 0,85 m/s, com aceleração e parada suaves.
-A cabeça continua livre. Caminhada manual e giro pelo analógico ficam suspensos até
+O tour foi pensado para o cliente sentado, olhando até 90° para cada lado.
+Ao iniciar, sente-se olhando à frente: essa direção vira a referência da visita.
+A base percorre a casa a 0,8 m/s, com aceleração e parada suaves, e conduz também
+o enquadramento horizontal. Os cômodos são apresentados à frente do visitante.
+A cabeça continua livre: pitch e roll do headset nunca são alterados. Caminhada
+manual e giro pelo analógico ficam suspensos até
 encerrar o tour; menu e saída do VR continuam disponíveis. As portas necessárias
 abrem automaticamente. O tour flutua sobre os móveis baixos, contorna paredes e
 evita colocar a câmera dentro de armários altos. A caminhada manual mantém sua física.
-Curvas fechadas e mudanças de altitude usam um breve fade.
-No VR, o percurso acompanha uma posição virtual estável, independente dos pequenos
-movimentos da cabeça. Assim, cada parada termina e o próximo ambiente inicia
-automaticamente, sem exigir que o visitante fique imóvel.
+O voo é contínuo: curvas locais suavizadas passam pelas portas, sem cortes nem
+escurecimento entre cômodos. A rotação horizontal tem limite de 18°/s e aceleração
+gradual. A referência da posição é o olhar neutro sentado, capturado uma vez,
+evitando acumular desvios ao olhar para os lados nas curvas.
+A altura virtual nos interiores é de aproximadamente 1,95 m sobre o piso,
+independentemente de o visitante estar sentado. O rastreamento continua livre.
 Sair do VR ou trocar a planta encerra o tour. Abrir o menu do sistema Meta suspende
 o avanço enquanto a sessão estiver sem foco.
 
 A visita começa na entrada e percorre todos os ambientes disponíveis. Depois,
-três vistas aéreas mostram fachada, espaço lateral e quintal, acima do telhado.
+um voo baixo e afastado contorna o lote, mostrando fachada, espaço lateral e quintal.
+O tour sai pela entrada e sobe em um ponto livre de cobertura; o deslocamento
+até o contorno passa acima dos telhados. As vistas do terreno ficam a cerca de
+3,8–4,5 m, com a casa à frente. A subida e a descida são visíveis e graduais.
+O cliente não precisa procurar a casa atrás de si ou olhar quase para o chão.
 O percurso termina de volta ao chão. Encerrar também devolve a uma posição livre
-para caminhar. Se uma passagem impedir o percurso contínuo, a transição para o
-próximo cômodo ocorre com a imagem totalmente escurecida, sem atravessar paredes
-visualmente ou abandonar os cômodos. No VR, olhe ao redor e para baixo nos trechos
-aéreos; no computador, a vista aérea enquadra a casa e o mouse permite olhar livremente.
+para caminhar. Se uma planta modificada não tiver uma conexão livre, o painel
+informa a passagem indisponível e permite avançar ou encerrar; não teleporta.
+No computador, o mesmo enquadramento guiado permite olhar com o mouse.
 O painel mostra a etapa atual e o total de paradas. Os textos do menu VR usam
 texturas de 2048 pixels e menos redução de qualidade enquanto o painel está aberto.
 
 Edite **`tour-config.js`** para ajustar o percurso: `stops` define a ordem dos
 ambientes, `room` busca o nome na planta e `label` define o texto exibido. Ambientes
 ausentes são ignorados. `u` e `v` escolhem a posição proporcional dentro do cômodo
-(0 a 1); `x` e `z` substituem essa posição por coordenadas em metros no mundo.
-`kind: 'aerial'` cria uma vista aérea: nesse caso, `u` e `v` são proporcionais
-ao terreno real, e a altura enquadra o lote, acima do ponto mais alto da casa/garagem.
-`dwell` define os segundos em cada parada (padrão 4), `speed` a velocidade e
+(0 a 1). Sem essas coordenadas, o tour escolhe um ponto próximo da borda do cômodo
+para mostrar o interior à frente. `focusU`/`focusV` escolhem a região apresentada.
+`kind: 'aerial'` cria uma vista externa: `angle` define a posição no contorno do lote
+em graus (0 = frente, 90 = direita, 180 = fundos). A distância se adapta ao lote.
+`eyeHeight` define a altura interna (limitada a 2 m), `exteriorHeight` a altura
+externa mínima, `turnSpeed` a velocidade máxima de giro visível em graus/s e
+`turnAcceleration` a aceleração angular. `cornerRadius` ajusta o arredondamento
+das curvas (reduzido automaticamente quando houver uma parede próxima).
+`dwell` define os segundos em cada parada (padrão 5), `speed` a velocidade e
 `start: 'entry'` mantém a sequência completa desde a entrada. O valor opcional
 `nearest` começa no ambiente mais próximo.
 Exemplo de ajuste só para a planta de 50 m²:

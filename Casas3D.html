@@ -5073,10 +5073,10 @@ function createWalkPhysics({ boxes = [], floors = [], doors = [], radius = 0.20,
   function blocked(x, z, feet = floorAt(x, z)) {
     return boxes.some(b => b.top > feet + 0.20 && b.bottom < feet + eyeHeight + 0.1 && overlaps(x, z, b)) || doors.some(d => hitsDoor(x, z, d));
   }
-  function blockedForTour(x,z,ignoreFurniture=false){const feet=floorAt(x,z);
+  function blockedForTour(x,z,ignoreFurniture=false,tourEyeHeight=eyeHeight){const feet=floorAt(x,z);
     // Low furniture does not obstruct a flying viewpoint. Keep tall cupboards
     // out of the lens so the tour never places the camera inside their surfaces.
-    return boxes.some(b=>(!ignoreFurniture||b.kind!=='furniture'||b.top>feet+eyeHeight-.1)&&b.top>feet+.20&&b.bottom<feet+eyeHeight+.1&&overlaps(x,z,b))||doors.some(d=>hitsDoor(x,z,d,d.openAngle));
+    return boxes.some(b=>(!ignoreFurniture||b.kind!=='furniture'||b.top>feet+tourEyeHeight-.1)&&b.top>feet+.20&&b.bottom<feet+tourEyeHeight+.1&&overlaps(x,z,b))||doors.some(d=>hitsDoor(x,z,d,d.openAngle));
   }
   function headBlocked(x,z,y=floorAt(x,z)+eyeHeight) {
     const padding=.025;
@@ -5195,7 +5195,7 @@ function attachWalkDoorPart(leaf, part) {
 }
 
 function createHousePhysics(house, { Box3, onChange, boundaryVisible = () => true, furnitureVisible = () => true }) {
-  const boxes = [], floors = [], doors = [], plan = house.userData.plan;
+  const boxes = [], floors = [], doors = [], flightBoxes=[], plan = house.userData.plan;
   house.updateMatrixWorld(true);
   for (const [, x, z, w, d] of plan.rooms) floors.push({minX:x-plan.w/2,maxX:x+w-plan.w/2,minZ:plan.d/2-z-d,maxZ:plan.d/2-z,top:0.4025});
   house.traverse(mesh => {
@@ -5227,10 +5227,13 @@ function createHousePhysics(house, { Box3, onChange, boundaryVisible = () => tru
     let group = mesh;
     while (group.parent && group.parent !== house) group = group.parent;
     const index = house.userData.groups.indexOf(group);
-    if (![7, 8].includes(index)) return;
+    if (![6, 7, 8].includes(index)) return;
     mesh.geometry.computeBoundingBox();
     const bound = new Box3().copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld);
     const b = {minX:bound.min.x,maxX:bound.max.x,minZ:bound.min.z,maxZ:bound.max.z,bottom:bound.min.y,top:bound.max.y};
+    // Roofs/ceilings are flight obstacles only; normal walking stays unchanged.
+    if(index===6||(index===7&&b.bottom>=2.4))flightBoxes.push(b);
+    if(index===6)return;
     if (b.top <= 0.43 && b.top > 0.05 && b.maxX - b.minX > 0.3 && b.maxZ - b.minZ > 0.25) floors.push(b);
     // Include furniture, glass, walls, columns and closed site gates, but not ceilings or labels.
     if (b.top > 0.5 && b.bottom < 2.4 && b.maxX - b.minX > 0.008 && b.maxZ - b.minZ > 0.008) {
@@ -5242,11 +5245,13 @@ function createHousePhysics(house, { Box3, onChange, boundaryVisible = () => tru
     }
   });
   const physics = createWalkPhysics({boxes, floors, doors, onChange});
+  physics.flightBoxes=flightBoxes;
   const entry = doors.find(d => d.outer && d.names.some(name => /^Sala/.test(name)));
   physics.spawn = entry ? {x:entry.hingeX + entry.width / 2, z:entry.hingeZ + 2.4} : {x:0,z:plan.d/2+2.4};
   physics.site=house.userData.site;
+  physics.roofTop=new Box3().setFromObject(house).max.y;
   // Aerial tour segments stay above every roof and pergola.
-  physics.tourAltitude=Math.max(new Box3().setFromObject(house).max.y+1.5,(physics.site?.depth||0)*.7,(physics.site?.width||0)*.7);
+  physics.tourAltitude=Math.max(physics.roofTop+1.5,(physics.site?.depth||0)*.7,(physics.site?.width||0)*.7);
   return physics;
 }
 
@@ -5259,7 +5264,7 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
   const walkingKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
   let active = false, saved = null, yaw = 0, pitch = 0, changed = false;
   let requestId = 0;
-  let settingsOpen = false,tourLookIndex=-1,tourLookManual=false;
+  let settingsOpen = false,tourLookOffset=0,tourPitchOffset=0;
 
   function captureMouse() {
     const id = ++requestId;
@@ -5352,7 +5357,7 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
   if (settingsButton) settingsButton.onclick = () => showSettings(!settingsOpen);
   document.addEventListener('mousemove', event => {
     if (!active || settingsOpen || (document.pointerLockElement !== canvas && event.target !== canvas)) return;
-    if(getTour()?.state.active)tourLookManual=true;
+    if(getTour()?.state.active){tourLookOffset-=(event.movementX||0)*.002;tourPitchOffset-=(event.movementY||0)*.002;}
     yaw -= (event.movementX || 0) * 0.002;
     pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch - (event.movementY || 0) * 0.002));
     look();
@@ -5387,10 +5392,11 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
 
   return {
     get active() { return active; },
+    get heading() { return yaw; },
     get settingsOpen() { return settingsOpen; },
     showSettings,
     start,
-    releaseForTour(){settingsOpen=false;keys.clear();document.body.classList.remove('walk-settings-open');if(document.pointerLockElement===canvas)document.exitPointerLock();},
+    releaseForTour(resetLook=false){settingsOpen=false;keys.clear();document.body.classList.remove('walk-settings-open');if(resetLook){tourLookOffset=0;tourPitchOffset=0;}if(document.pointerLockElement===canvas)document.exitPointerLock();},
     stop,
     refreshHouse() {
       if (!active) return;
@@ -5418,15 +5424,13 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
       const tour=getTour();
       if(tour?.state.active){
         tour.update(camera.position,delta);
-        if(tourLookIndex!==tour.state.index){tourLookIndex=tour.state.index;tourLookManual=false;}
         const focus=tour.state.focus;
-        // Desktop aerial views frame the property. The XR rig never uses this:
-        // the headset retains its native orientation throughout the whole tour.
-        if(focus&&!tourLookManual&&!tour.state.paused){
+        // Match the seated framing on desktop while retaining mouse look offsets.
+        // Only the desktop camera tilts slightly; XR changes the base yaw only.
+        if(focus&&Number.isFinite(tour.state.heading)&&!tour.state.paused){
           const dx=focus.x-camera.position.x,dy=focus.y-camera.position.y,dz=focus.z-camera.position.z;
-          const wantedYaw=Math.atan2(-dx,-dz),wantedPitch=Math.atan2(dy,Math.hypot(dx,dz));
-          const angle=Math.atan2(Math.sin(wantedYaw-yaw),Math.cos(wantedYaw-yaw)),blend=tour.state.fade===1?1:Math.min(1,delta*1.2);
-          yaw+=angle*blend;pitch+=(wantedPitch-pitch)*blend;look();
+          const wantedPitch=Math.max(-.3,Math.min(.1,Math.atan2(dy,Math.hypot(dx,dz))))+tourPitchOffset,blend=tour.state.fade===1?1:Math.min(1,delta*1.2);
+          yaw=tour.state.heading+tourLookOffset;pitch=Math.max(-Math.PI/2+.01,Math.min(Math.PI/2-.01,pitch+(wantedPitch-pitch)*blend));look();
         }
         const moved=getPhysics()?.update(delta,null);const result=changed||moved||!tour.state.paused;changed=false;return result;
       }
@@ -5462,12 +5466,14 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
 
 // World metres. Room names resolve separately for every plan.
 // Override per house: models:{'69':{kitchen:{u:.5,v:.65,dwell:5}}}.
-// Aerial u/v are fractions of the actual lot (0..1); height clears every roof.
-const CASA_TOUR_CONFIG={speed:.85,acceleration:.55,dwell:4,grid:.10,fadeSeconds:.45,
+// Room u/v override the camera position; focusU/focusV set the subject (0..1).
+// Exterior angles orbit the actual lot: 0=front, 90=right, 180=back.
+const CASA_TOUR_CONFIG={speed:.8,acceleration:.5,dwell:5,grid:.10,
+  eyeHeight:1.95,turnSpeed:18,turnAcceleration:14,cornerRadius:.55,exteriorHeight:3.8,
   start:'entry',models:{},stops:[
     {id:'entry',label:'Entrada',kind:'entry',dwell:2},
-    {id:'living',label:'Sala de estar',room:'^Sala',v:.3},
-    {id:'kitchen',label:'Cozinha',room:'Cozinha',v:.75},
+    {id:'living',label:'Sala de estar',room:'^Sala',focusV:.3},
+    {id:'kitchen',label:'Cozinha',room:'Cozinha',focusV:.75},
     {id:'hall',room:'Circula|Corredor',dwell:2},
     {id:'bed1',room:'^Quarto 1$'},
     {id:'bed2',room:'^Quarto 2$'},
@@ -5476,21 +5482,22 @@ const CASA_TOUR_CONFIG={speed:.85,acceleration:.55,dwell:4,grid:.10,fadeSeconds:
     {id:'bath',room:'^Banheiro$'},
     {id:'suite-bath',room:'^Banheiro suíte$'},
     {id:'service',room:'^Serviço$'},
-    {id:'aerial-front',label:'Vista aérea · fachada e terreno',kind:'aerial',u:.35,v:.10,dwell:5},
-    {id:'aerial-side',label:'Vista aérea · espaço lateral',kind:'aerial',u:.86,v:.45,dwell:5},
-    {id:'aerial-back',label:'Vista aérea · quintal e fundos',kind:'aerial',u:.65,v:.88,dwell:5},
-    {id:'outside',label:'Retorno à entrada',kind:'entry',dwell:2}
+    {id:'aerial-front',label:'Fachada e terreno',kind:'aerial',angle:-20,dwell:6},
+    {id:'aerial-side',label:'Espaço lateral e terreno',kind:'aerial',angle:85,dwell:6},
+    {id:'aerial-back',label:'Quintal e fundos',kind:'aerial',angle:170,dwell:6},
+    {id:'outside',label:'Retorno à entrada',kind:'entry',walkingHeight:true,dwell:2}
   ]};
 
 // Routes are prepared once, off the render thread. The tour ignores furniture
 // and gravity; visible paths remain clear of walls and open door leaves.
 function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
-  const step=config.grid,margin=3,minX=Math.min(-plan.w/2-margin,position.x-1),minZ=Math.min(-plan.d/2-margin,position.z-1);
+  const eye=Math.max(physics.eyeHeight,Math.min(config.eyeHeight??1.95,2));
+  const step=config.grid,margin=4,minX=Math.min(-plan.w/2-margin,position.x-1),minZ=Math.min(-plan.d/2-margin,position.z-1);
   const maxX=Math.max(plan.w/2+margin,position.x+1),maxZ=Math.max(plan.d/2+margin,position.z+1,physics.spawn.z+1);
   const width=Math.ceil((maxX-minX)/step)+1,height=Math.ceil((maxZ-minZ)/step)+1,count=width*height;
   const free=new Uint8Array(count),queue=new Int32Array(count),parent=new Int32Array(count);
   function coords(id){return {x:minX+(id%width)*step,z:minZ+Math.floor(id/width)*step};}
-  for(let id=0;id<count;id++)free[id]=Number(!physics.blockedForTour(minX+(id%width)*step,minZ+Math.floor(id/width)*step,true));
+  for(let id=0;id<count;id++)free[id]=Number(!physics.blockedForTour(minX+(id%width)*step,minZ+Math.floor(id/width)*step,true,eye));
   function nearest(point,bounds){let best=-1,distance=Infinity;
     for(let id=0;id<count;id++){if(!free[id])continue;const x=minX+(id%width)*step,z=minZ+Math.floor(id/width)*step;
       if(bounds&&(x<bounds.minX+physics.radius||x>bounds.maxX-physics.radius||z<bounds.minZ+physics.radius||z>bounds.maxZ-physics.radius))continue;
@@ -5508,61 +5515,165 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
     }
   }
   function clear(a,b){const n=Math.max(1,Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)/.04));
-    for(let i=0;i<=n;i++){const t=i/n;if(physics.blockedForTour(a.x+(b.x-a.x)*t,a.z+(b.z-a.z)*t,true))return false;}return true;
+    for(let i=0;i<=n;i++){const t=i/n;if(physics.blockedForTour(a.x+(b.x-a.x)*t,a.z+(b.z-a.z)*t,true,eye))return false;}return true;
   }
-  const altitude=physics.tourAltitude||7,eye=physics.eyeHeight;
-  function aerial(p){return p.kind==='aerial'||p.y>=altitude-.05;}
-  function route(from,to){
-    // Change altitude under a fade, never by ascending through ceilings/roofs.
-    if(aerial(from)||aerial(to))return aerial(from)&&aerial(to)?[{...from},{...to}]:null;
+  // Fly outside the lot instead of directly above the house. The subject stays
+  // near eye level, inside the seated viewer's forward hemisphere.
+  const site=physics.site||{x0:-3,x1:plan.w+3,z0:-4,z1:plan.d+4};
+  const center={x:(site.x0+site.x1)/2-plan.w/2,z:plan.d/2-(site.z0+site.z1)/2};
+  const altitude=Math.max(config.exteriorHeight??3.8,Math.min(4.5,(physics.roofTop||4)*.8));
+  const orbitRadius=Math.hypot(site.x1-site.x0,site.z1-site.z0)/2+3;
+  const exteriorFocus={x:center.x,y:1.6,z:center.z};
+  function aerial(p){return p.kind==='aerial'||p.y>physics.floorAt(p.x,p.z)+eye+.25;}
+  function viewHeading(p,focus){return Math.atan2(p.x-focus.x,p.z-focus.z);}
+  const flightBoxes=[...physics.boxes.filter(b=>b.kind!=='furniture'&&(!b.enabled||b.enabled())),...(physics.flightBoxes||[])];
+  const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+  function flightClear(a,b){
+    // Slab intersection against expanded architecture, including roof overhangs.
+    const pad=.08;
+    for(const box of flightBoxes){let lo=0,hi=1;
+      for(const [axis,min,max] of [['x',box.minX-pad,box.maxX+pad],['y',box.bottom-pad,box.top+pad],['z',box.minZ-pad,box.maxZ+pad]]){
+        const d=b[axis]-a[axis];if(Math.abs(d)<1e-9){if(a[axis]<min||a[axis]>max){lo=2;break;}continue;}
+        const t1=(min-a[axis])/d,t2=(max-a[axis])/d;lo=Math.max(lo,Math.min(t1,t2));hi=Math.min(hi,Math.max(t1,t2));if(lo>hi)break;
+      }
+      if(lo<=hi)return false;
+    }
+    return true;
+  }
+  function groundRoute(from,to){
     const start=nearest(from),finish=nearest(to);flood(start);if(finish<0||parent[finish]===-2)return null;
     const raw=[];for(let id=finish;id>=0;id=parent[id])raw.push(coords(id));raw.reverse();raw.unshift({x:from.x,z:from.z});
     const result=[raw[0]];let i=0;while(i<raw.length-1){let end=raw.length-1;while(end>i+1&&!clear(raw[i],raw[end]))end--;if(!clear(raw[i],raw[end]))return null;result.push(raw[end]);i=end;}
     let length=0;for(let j=1;j<result.length;j++)length+=Math.hypot(result[j].x-result[j-1].x,result[j].z-result[j-1].z);
+    if(length<.0001)return [{...from},{...to}];
     let travelled=0;for(let j=0;j<result.length;j++){if(j)travelled+=Math.hypot(result[j].x-result[j-1].x,result[j].z-result[j-1].z);const t=length?travelled/length:1;result[j].y=(from.y??eye)+((to.y??eye)-(from.y??eye))*t;}
     return result;
   }
+  // Round each bend locally. A global spline can bulge through the wall beside a
+  // door; these short curves are accepted only after checking every chord.
+  function smooth(raw,ground=false){
+    if(!raw||raw.length<3)return raw;
+    const result=[raw[0]],safe=ground?(a,b)=>clear(a,b)&&flightClear(a,b):flightClear;
+    for(let i=1;i<raw.length-1;i++){
+      const a=raw[i-1],b=raw[i],c=raw[i+1];let radius=Math.min(config.cornerRadius??.55,distance(a,b)*.4,distance(b,c)*.4),curve=null;
+      while(radius>.015){
+        const ab=radius/distance(a,b),bc=radius/distance(b,c);
+        const enter={x:b.x+(a.x-b.x)*ab,y:b.y+(a.y-b.y)*ab,z:b.z+(a.z-b.z)*ab,view:b.view};
+        const leave={x:b.x+(c.x-b.x)*bc,y:b.y+(c.y-b.y)*bc,z:b.z+(c.z-b.z)*bc,view:c.view};
+        const candidate=[enter],n=Math.max(4,Math.ceil(radius/.035));let valid=safe(result[result.length-1],enter);
+        for(let j=1;j<=n&&valid;j++){const t=j/n,u=1-t,p={x:u*u*enter.x+2*u*t*b.x+t*t*leave.x,y:u*u*enter.y+2*u*t*b.y+t*t*leave.y,z:u*u*enter.z+2*u*t*b.z+t*t*leave.z,view:b.view};valid=safe(candidate[candidate.length-1],p);candidate.push(p);}
+        if(valid){curve=candidate;break;}radius*=.5;
+      }
+      if(curve)result.push(...curve);else result.push(b);
+    }
+    result.push(raw[raw.length-1]);return result;
+  }
+  let launch=null;
+  const cruise=Math.max(altitude,(physics.roofTop||4)+.8);
+  function launchPoint(){
+    if(launch)return launch;
+    flood(nearest(physics.spawn));const candidates=[];
+    for(let id=0;id<count;id++){if(!free[id]||parent[id]===-2||id%3)continue;const p=coords(id);
+      if(Math.abs(p.x)<plan.w/2+.4&&Math.abs(p.z)<plan.d/2+.4)continue;
+      p.y=physics.floorAt(p.x,p.z)+eye;
+      candidates.push({p,score:Math.hypot(p.x-physics.spawn.x,p.z-physics.spawn.z)});
+    }
+    candidates.sort((a,b)=>a.score-b.score);
+    for(const {p} of candidates)if(flightClear(p,{...p,y:cruise})){launch=p;return p;}
+    return null;
+  }
+  function route(from,to){
+    if(!aerial(from)&&!aerial(to))return smooth(groundRoute(from,to),true);
+    if(aerial(from)&&aerial(to)&&Math.abs(Math.hypot(from.x-center.x,from.z-center.z)-orbitRadius)<.1&&Math.abs(from.y-altitude)<.1){
+      const angle=Math.atan2(from.x-center.x,from.z-center.z),end=Math.atan2(to.x-center.x,to.z-center.z);
+      const sweep=Math.atan2(Math.sin(end-angle),Math.cos(end-angle)),n=Math.max(1,Math.ceil(Math.abs(sweep)/(Math.PI/60)));
+      const arc=[{...from,view:exteriorFocus}];for(let j=1;j<=n;j++){const a=angle+sweep*j/n;arc.push({x:center.x+orbitRadius*Math.sin(a),y:altitude,z:center.z+orbitRadius*Math.cos(a),view:exteriorFocus});}arc[n]={...to,view:exteriorFocus};return arc;
+    }
+    if(aerial(from)&&aerial(to)){
+      const flight=[from,{...from,y:cruise,view:exteriorFocus},{...to,y:cruise,view:exteriorFocus},{...to,view:exteriorFocus}];
+      for(let i=1;i<flight.length;i++)if(!flightClear(flight[i-1],flight[i]))return null;
+      return smooth(flight);
+    }
+    const takeoff=launchPoint();if(!takeoff)return null;
+    const outside=aerial(to)?to:from,inside=aerial(to)?from:to;
+    const ground=groundRoute(inside,takeoff);if(!ground)return null;
+    const rise={...takeoff,y:cruise,view:exteriorFocus},over={x:outside.x,y:cruise,z:outside.z,view:exteriorFocus};
+    const air=[takeoff,rise,over,{...outside,view:exteriorFocus}];
+    for(let i=1;i<air.length;i++)if(!flightClear(air[i-1],air[i]))return null;
+    const combined=[...smooth(ground,true).slice(0,-1),...smooth(air)];
+    return aerial(to)?combined:combined.reverse();
+  }
   const points=[];
-  for(const stop of config.stops){const spec={...stop,...config.models?.[model]?.[stop.id]};let target,bounds,name=spec.label;
+  for(const stop of config.stops){const spec={...stop,...config.models?.[model]?.[stop.id]};let target,bounds,focus,name=spec.label,roomName;
     if(spec.kind==='aerial'){
-      const site=physics.site||{x0:-3,x1:plan.w+3,z0:-4,z1:plan.d+4};
-      target={x:site.x0+(site.x1-site.x0)*(spec.u??.5)-plan.w/2,z:plan.d/2-site.z0-(site.z1-site.z0)*(spec.v??.5)};
-      if(Number.isFinite(spec.x)&&Number.isFinite(spec.z))target=spec;
-      points.push({...target,y:altitude,kind:'aerial',id:spec.id,label:name,dwell:spec.dwell??config.dwell,focus:{x:0,y:.5,z:0}});continue;
+      const angle=(spec.angle??0)*Math.PI/180;
+      target={x:center.x+orbitRadius*Math.sin(angle),z:center.z+orbitRadius*Math.cos(angle)};
+      points.push({...target,y:altitude,kind:'aerial',id:spec.id,label:name,dwell:spec.dwell??config.dwell,focus:exteriorFocus,heading:viewHeading(target,exteriorFocus)});continue;
     }
     if(Number.isFinite(spec.x)&&Number.isFinite(spec.z))target=spec;
     else if(spec.kind==='entry')target=physics.spawn;
     else{const room=plan.rooms.find(r=>new RegExp(spec.room,'i').test(r[0]));if(!room)continue;
-      const [label,x,z,w,d]=room;name||=label;target={x:x+w*(spec.u??.5)-plan.w/2,z:plan.d/2-z-d*(spec.v??.5)};
-      bounds={minX:x-plan.w/2,maxX:x+w-plan.w/2,minZ:plan.d/2-z-d,maxZ:plan.d/2-z};}
-    // Every room gets a viewpoint. Disconnected passages use a fade instead of
-    // silently removing the room from the itinerary.
+      const [label,x,z,w,d]=room;name||=label;roomName=label;
+      bounds={minX:x-plan.w/2,maxX:x+w-plan.w/2,minZ:plan.d/2-z-d,maxZ:plan.d/2-z};
+      focus={x:x+w*(spec.focusU??.5)-plan.w/2,y:physics.floorAt(x+w/2-plan.w/2,plan.d/2-z-d/2)+eye-.2,z:plan.d/2-z-d*(spec.focusV??.5)};
+      if(Number.isFinite(spec.u)||Number.isFinite(spec.v))target={x:x+w*(spec.u??.5)-plan.w/2,z:plan.d/2-z-d*(spec.v??.5)};
+      else{
+        const zone={...bounds};if(/Sala.*cozinha/i.test(label)){if(spec.id==='kitchen')zone.maxZ-=d*.5;else zone.minZ+=d*.5;}
+        const insetX=Math.min(.5,(zone.maxX-zone.minX)*.3),insetZ=Math.min(.5,(zone.maxZ-zone.minZ)*.3);
+        let score=-Infinity;
+        for(const x of [zone.minX+insetX,zone.maxX-insetX])for(const z of [zone.minZ+insetZ,zone.maxZ-insetZ]){
+          const id=nearest({x,z},zone);if(id<0)continue;const p=coords(id);
+          let approach=4;for(const door of physics.doors)if(door.names?.includes(label))approach=Math.min(approach,Math.hypot(p.x-door.hingeX,p.z-door.hingeZ));
+          const value=Math.hypot(p.x-focus.x,p.z-focus.z)-approach*.12;
+          if(value>score){score=value;target=p;}
+        }
+        target||=focus;
+      }
+    }
+    // Every room gets a viewpoint. Report an unavailable connection rather than
+    // teleporting through architecture or silently removing the destination.
     const id=nearest(target,bounds);if(id<0)throw Error('Não foi encontrado um ponto seguro em '+(name||spec.id)+'.');
-    const point=coords(id);points.push({...point,y:physics.floorAt(point.x,point.z)+eye,id:spec.id,label:name||spec.id,dwell:spec.dwell??config.dwell});
+    const point=coords(id),y=physics.floorAt(point.x,point.z)+(spec.walkingHeight?physics.eyeHeight:eye);
+    focus||={x:physics.spawn.x,y,z:physics.spawn.z-3};
+    points.push({...point,y,id:spec.id,label:name||spec.id,dwell:spec.dwell??config.dwell,focus,heading:viewHeading(point,focus),roomName});
   }
   if(!points.length)throw Error('Não foi encontrado um percurso para esta planta.');
   const legs=points.slice(0,-1).map((p,i)=>route(p,points[i+1]));
-  return {points,legs,route,clear,cells:count};
+  return {points,legs,route,clear,flightClear,cells:count};
 }
 
 function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,onChange=()=>{},plannerFactory=()=>null}) {
-  const state={active:false,paused:false,label:'',phase:'idle',index:0,total:0,revision:0,fade:0,message:'',focus:null};
-  let navigation=null,physics=null,path=null,cursor=1,speed=0,hold=0,fadeTime=0,transitioned=false;
+  const state={active:false,paused:false,label:'',phase:'idle',index:0,total:0,revision:0,fade:0,message:'',focus:null,heading:null,kind:'room'};
+  let navigation=null,physics=null,path=null,cursor=1,speed=0,hold=0,turnSpeed=0,remaining=[];
   let planner=null,generation=0,requestId=0,lastPosition=null;
+  const radians=Math.PI/180,turnRate=(config.turnSpeed??18)*radians,turnAcceleration=(config.turnAcceleration??14)*radians;
+  const difference=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
   function changed(){state.revision++;onChange(state);}
+  function aimHeading(position,aim){return Math.hypot(aim.x-position.x,aim.z-position.z)>.15?Math.atan2(position.x-aim.x,position.z-aim.z):navigation.points[state.index].heading;}
+  function turn(heading,dt){
+    const angle=difference(heading,state.heading),target=Math.sign(angle)*Math.min(turnRate,Math.sqrt(2*turnAcceleration*Math.abs(angle)));
+    turnSpeed+=Math.max(-turnAcceleration*dt,Math.min(turnAcceleration*dt,target-turnSpeed));
+    const step=turnSpeed*dt;
+    if(Math.sign(step)===Math.sign(angle)&&Math.abs(step)>=Math.abs(angle)){state.heading+=angle;turnSpeed=0;return true;}
+    state.heading+=step;return Math.abs(angle)<.0001&&Math.abs(turnSpeed)<.001;
+  }
   function restoreWalking(){
     if(!lastPosition||!physics?.blocked)return;const p=getPhysics(),x=lastPosition.x,z=lastPosition.z;let safe=!p.blocked(x,z)?{x,z}:null;
     for(let radius=.1;!safe&&radius<=4;radius+=.1)for(let i=0;i<48;i++){const angle=i*Math.PI/24,px=x+Math.cos(angle)*radius,pz=z+Math.sin(angle)*radius;if(!p.blocked(px,pz)){safe={x:px,z:pz};break;}}
     safe||=p.spawn;lastPosition.x=safe.x;lastPosition.z=safe.z;lastPosition.y=p.floorAt(safe.x,safe.z)+p.eyeHeight;
   }
-  function stop(message='Tour encerrado.'){generation++;requestId++;planner?.dispose();planner=null;restoreWalking();state.active=false;state.paused=false;state.phase='idle';state.fade=0;state.focus=null;state.message=message;speed=0;changed();}
+  function stop(message='Tour encerrado.'){generation++;requestId++;planner?.dispose();planner=null;restoreWalking();state.active=false;state.paused=false;state.phase='idle';state.fade=0;state.focus=null;state.heading=null;state.message=message;speed=0;changed();}
   function setRoute(index,position,prepared){
     if(index>=navigation.points.length){stop('Tour concluído.');return;}
-    state.index=Math.max(0,index);const destination=navigation.points[state.index];state.label=destination.label;state.focus=destination.focus||null;state.message=destination.kind==='aerial'?'Olhe ao redor e para baixo para conhecer o terreno.':'';
-    path=prepared!==undefined?prepared:navigation.route(position,destination);cursor=1;speed=0;state.fade=0;fadeTime=0;transitioned=false;
-    state.phase=path?'moving':'transition';changed();
+    state.index=Math.max(0,index);const destination=navigation.points[state.index];state.label=destination.label;state.focus=destination.focus||null;state.kind=destination.kind||'room';state.message='Assista sentado. O tour apresenta a casa à frente; olhe livremente para os lados.';
+    path=prepared!==undefined?prepared:navigation.route(position,destination);cursor=1;speed=0;state.fade=0;
+    if(path){
+      remaining=new Float64Array(path.length);for(let i=path.length-2;i>=0;i--)remaining[i]=remaining[i+1]+Math.hypot(path[i+1].x-path[i].x,path[i+1].y-path[i].y,path[i+1].z-path[i].z);
+      state.phase='moving';
+    }else{state.phase='unavailable';state.paused=true;state.message='Não há passagem livre até '+destination.label+'. Use Próximo ambiente ou encerre o tour.';}
+    changed();
   }
-  function start(position){generation++;requestId++;planner?.dispose();planner=null;physics=getPhysics();lastPosition=position;const token=generation;navigation=null;state.total=0;state.index=0;state.focus=null;
+  function start(position,heading=0){generation++;requestId++;planner?.dispose();planner=null;physics=getPhysics();lastPosition=position;const token=generation;navigation=null;state.total=0;state.index=0;state.focus=null;state.heading=heading;turnSpeed=0;
     planner=plannerFactory();if(planner){
       state.active=true;state.paused=false;state.fade=0;state.phase='planning';state.label='Preparando tour…';state.message='O percurso está sendo calculado.';changed();
       const origin={x:position.x,y:position.y,z:position.z};planner.build({physics,plan:getPlan(),model:getModel(),position:origin,config}).then(result=>{
@@ -5573,10 +5684,10 @@ function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,on
     let index=0;if(config.start!=='entry'){let d=Infinity;navigation.points.forEach((p,i)=>{const n=Math.hypot(p.x-position.x,p.z-position.z);if(n<d){d=n;index=i;}});}
     state.active=true;state.paused=false;state.total=navigation.points.length;setRoute(index,position);return state;
   }
-  function action(type,position){
-    if(type==='start')return start(position);if(type==='stop'){stop();return;}
+  function action(type,position,heading=0){
+    if(type==='start')return start(position,heading);if(type==='stop'){stop();return;}
     if(!state.active)return;
-    if(type==='pause'){state.paused=true;speed=0;state.fade=0;changed();}
+    if(type==='pause'){state.paused=true;speed=0;turnSpeed=0;state.fade=0;changed();}
     if(type==='resume'){state.paused=false;changed();}
     if((type==='next'||type==='previous')&&navigation&&state.phase!=='planning'){
       const index=Math.max(0,Math.min(navigation.points.length-1,state.index+(type==='next'?1:-1)));state.paused=false;
@@ -5587,30 +5698,35 @@ function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,on
   }
   function update(position,delta){
     if(!state.active)return false;lastPosition=position;if(getPhysics()!==physics){stop('Planta alterada. Inicie um novo tour.');return false;}
-    if(state.paused||state.phase==='planning')return true;const dt=Math.min(.05,delta),destination=navigation.points[state.index];
+    if(state.paused||state.phase==='planning'||state.phase==='unavailable')return true;const dt=Math.min(.05,delta),destination=navigation.points[state.index];
     // Animate existing doors ahead of the visitor; furniture never halts playback.
-    for(const door of physics.doors)if(Math.hypot(door.hingeX-position.x,door.hingeZ-position.z)<2.5||state.phase==='transition')door.target=door.openAngle;
+    for(const door of physics.doors)if(Math.hypot(door.hingeX-position.x,door.hingeZ-position.z)<2.5)door.target=door.openAngle;
     if(state.phase==='dwell'){hold-=dt;if(hold<=0)setRoute(state.index+1,position,navigation.legs[state.index]);return true;}
-    if(state.phase==='transition'){
-      fadeTime+=dt;const fade=config.fadeSeconds;
-      if(fadeTime<fade)state.fade=fadeTime/fade;
-      else if(fadeTime<fade+.35){state.fade=1;if(!transitioned){position.x=destination.x;position.y=destination.y;position.z=destination.z;transitioned=true;}}
-      else state.fade=Math.max(0,1-(fadeTime-fade-.35)/fade);
-      if(fadeTime>=fade*2+.35){state.fade=0;state.phase='dwell';hold=destination.dwell;changed();}return true;
+    if(state.phase==='settle'){
+      if(turn(destination.heading,dt)){state.phase='dwell';hold=destination.dwell;changed();}return true;
     }
-    if(state.phase==='turn'){fadeTime+=dt;state.fade=Math.sin(Math.min(1,fadeTime/(config.fadeSeconds*2))*Math.PI);if(fadeTime>=config.fadeSeconds*2){state.fade=0;state.phase='moving';}return true;}
-    const aim=path?.[cursor];if(!aim){state.phase='dwell';hold=destination.dwell;changed();return true;}
+    let aim=path?.[cursor];
+    while(aim&&Math.hypot(aim.x-position.x,aim.y-position.y,aim.z-position.z)<.000001){cursor++;aim=path[cursor];}
+    if(!aim){speed=0;state.phase='settle';changed();return true;}
     const dx=aim.x-position.x,dy=aim.y-position.y,dz=aim.z-position.z,distance=Math.hypot(dx,dy,dz);
-    if(distance<.000001){
-      if(cursor>=path.length-1){state.phase='dwell';hold=destination.dwell;speed=0;changed();return true;}
-      const before=path[cursor-1],after=path[cursor+1],ax=aim.x-before.x,az=aim.z-before.z,bx=after.x-aim.x,bz=after.z-aim.z;
-      const sharp=(ax*bx+az*bz)/(Math.hypot(ax,az)*Math.hypot(bx,bz)||1)<.35;
-      cursor++;if(sharp){state.phase='turn';fadeTime=0;speed=0;}return true;
-    }
-    const target=Math.min(config.speed,Math.sqrt(2*config.acceleration*distance));speed=Math.min(target,speed+config.acceleration*dt);
-    const step=Math.min(distance,speed*dt)/distance;
+    const left=distance+remaining[cursor];
+    // Look a little ahead along the prepared curve, then frame the room itself
+    // during the final approach. Head tracking remains independent of this yaw.
+    let look=aim,lookDistance=distance,j=cursor;
+    while(j<path.length-1&&lookDistance<1.1){lookDistance+=remaining[j]-remaining[j+1];look=path[++j];}
+    let heading=aim.view?aimHeading(position,aim.view):aimHeading(position,look);
+    const framing=Math.max(0,Math.min(1,1-left/2));heading+=difference(destination.heading,heading)*framing;
+    const error=Math.abs(difference(heading,state.heading));turn(heading,dt);
+    const braking=Math.sqrt(2*config.acceleration*left),cornerSpeed=Math.max(.28,config.speed*(1-error/Math.PI));
+    const target=Math.min(config.speed,braking,cornerSpeed);speed+=Math.max(-config.acceleration*dt,Math.min(config.acceleration*dt,target-speed));
     // Camera flight, not a walking body. Architectural clearance is precomputed.
-    position.x+=dx*step;position.y+=dy*step;position.z+=dz*step;return true;
+    let travel=speed*dt;
+    while(travel>0&&cursor<path.length){
+      const p=path[cursor],x=p.x-position.x,y=p.y-position.y,z=p.z-position.z,d=Math.hypot(x,y,z);
+      if(d<=travel){position.x=p.x;position.y=p.y;position.z=p.z;travel-=d;cursor++;}
+      else{const t=travel/d;position.x+=x*t;position.y+=y*t;position.z+=z*t;travel=0;}
+    }
+    return true;
   }
   return {state,start,action,stop,update,get points(){return navigation?.points||[];}};
 }
@@ -5621,7 +5737,7 @@ function createTourPlanner(){
   const source=createWalkPhysics.toString()+'\n'+buildHouseTour.toString()+`\nlet navigation;
     onmessage=event=>{const {id,type,data}=event.data;try{
       let result;if(type==='build'){
-        const physics=createWalkPhysics(data.physics);physics.spawn=data.spawn;physics.site=data.site;physics.tourAltitude=data.tourAltitude;
+        const physics=createWalkPhysics(data.physics);physics.spawn=data.spawn;physics.site=data.site;physics.tourAltitude=data.tourAltitude;physics.roofTop=data.roofTop;physics.flightBoxes=data.flightBoxes;
         navigation=buildHouseTour({...data,physics});let index=0,distance=Infinity;
         if(data.config.start!=='entry')navigation.points.forEach((p,i)=>{const d=Math.hypot(p.x-data.position.x,p.z-data.position.z);if(d<distance){distance=d;index=i;}});
         result={points:navigation.points,legs:navigation.legs,index,path:navigation.route(data.position,navigation.points[index])};
@@ -5633,7 +5749,7 @@ function createTourPlanner(){
   worker.onerror=()=>{for(const pending of requests.values())pending.reject(Error('Não foi possível preparar o tour.'));requests.clear();};
   function request(type,data){return new Promise((resolve,reject)=>{requests.set(++id,{resolve,reject});worker.postMessage({id,type,data});});}
   return {
-    build({physics,plan,model,position,config}){return request('build',{plan:{w:plan.w,d:plan.d,rooms:plan.rooms},model,position:{x:position.x,y:position.y,z:position.z},config,spawn:physics.spawn,site:physics.site,tourAltitude:physics.tourAltitude,
+    build({physics,plan,model,position,config}){return request('build',{plan:{w:plan.w,d:plan.d,rooms:plan.rooms},model,position:{x:position.x,y:position.y,z:position.z},config,spawn:physics.spawn,site:physics.site,tourAltitude:physics.tourAltitude,roofTop:physics.roofTop,flightBoxes:physics.flightBoxes,
       physics:{boxes:physics.boxes.filter(b=>!b.enabled||b.enabled()).map(({enabled,...box})=>box),floors:physics.floors,doors:physics.doors.map(({apply,...door})=>door),radius:physics.radius,eyeHeight:physics.eyeHeight}});},
     route(index,position){return request('route',{index,position:{x:position.x,y:position.y,z:position.z}});},
     dispose(){worker.terminate();URL.revokeObjectURL(url);for(const pending of requests.values())pending.reject(Error('Tour encerrado.'));requests.clear();}
@@ -5717,13 +5833,13 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
     } else if(page==='tour') {
       const tour=s.tour||{};
       item('tour-start','Tour automático',35,195,970,68,()=>choose('tour','start'),!!tour.active);
-      text('Tour da casa'+(tour.total?' · '+(tour.index+1)+' / '+tour.total:''),35,310,30);text(tour.active?tour.label:'Cômodos, fachada e vistas aéreas do terreno.',35,352,26);
+      text('Tour sentado'+(tour.total?' · '+(tour.index+1)+' / '+tour.total:''),35,310,30);text(tour.active?tour.label:'Visão elevada · Cômodos, fachada e terreno.',35,352,26);
       item('tour-pause','Pausar',35,385,475,62,()=>choose('tour','pause'),false,!tour.active||tour.paused);
       item('tour-resume','Continuar',530,385,475,62,()=>choose('tour','resume'),false,!tour.active||!tour.paused);
       item('tour-next','Próximo ambiente',35,465,475,62,()=>choose('tour','next'),false,!tour.active);
       item('tour-previous','Ambiente anterior',530,465,475,62,()=>choose('tour','previous'),false,!tour.active);
       item('tour-stop','Encerrar tour',35,545,970,62,()=>choose('tour','stop'),false,!tour.active);
-      wrap(tour.message||'Olhe livremente. O tour move apenas a sua posição.',35,657,970,24);
+      wrap(tour.message||'Sente-se olhando à frente ao iniciar. O tour guia a visão; você pode olhar para os lados.',35,657,970,24);
     } else {
       text('SENSAÇÃO DE ESPAÇO',35,224,25);
       [[1,'Normal'],[1.4,'Ampla'],[2,'Muito ampla']].forEach(([value,label],i)=>item('amplitude-'+value,label,35+i*326,252,312,78,()=>choose('amplitude',value),s.amplitude===value));
@@ -5975,7 +6091,27 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   const head = new Vector3(), direction = new Vector3();
   // The tour follows a stable virtual body. Tracked head motion must not move
   // the route's arrival target or be canceled by translating the rig backwards.
-  const tourBody={x:0,y:0,z:0};let tourOwner=null;
+  const tourBody={x:0,y:0,z:0};let tourOwner=null,seatedHeadYaw=0;
+  const turnPivot=new Vector3(),turnAfter=new Vector3(),seatedEye=new Vector3();
+  function calibrateSeatedTour(){
+    camera.getWorldDirection(direction);
+    // Capture the seated forward direction once. Never chase sideways head turns.
+    seatedHeadYaw=Math.atan2(-direction.x,-direction.z)-rig.rotation.y;
+    camera.getWorldPosition(seatedEye);rig.worldToLocal(seatedEye);
+  }
+  function guideTourHeading(tour){
+    if(!Number.isFinite(tour?.state.heading))return;
+    const yaw=tour.state.heading-seatedHeadYaw;
+    const changed=Math.abs(yaw-rig.rotation.y)>=1e-8,c=Math.cos(yaw),s=Math.sin(yaw),scale=rig.scale.x;
+    // Anchor the neutral seated eye to the route, not the current sideways look.
+    // Turning around different live head poses would accumulate position drift.
+    rig.rotation.y=yaw;
+    rig.position.x=tourBody.x-scale*(c*seatedEye.x+s*seatedEye.z);
+    rig.position.z=tourBody.z-scale*(-s*seatedEye.x+c*seatedEye.z);
+    rig.position.y=tourBody.y-scale*seatedEye.y;
+    rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);
+    if(changed&&panel?.visible){camera.getWorldPosition(turnPivot);camera.getWorldDirection(turnAfter);panel.place?.(turnPivot,turnAfter);}
+  }
   const rayOrigin=new Vector3(),rayDirection=new Vector3();
   const rayControllers = [];
   const handVisuals=[],pointers=[];
@@ -5983,7 +6119,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   let exitHeldSince=null,exitTimer=null,ending=false,frameError=null,frames=0,lastRenderedAt=0;
   const handWalk=typeof createQuestHandWalk==='function'?createQuestHandWalk({Vector3}):null;
   let handPauseUntil=0;
-  let currentFoveation=1;
+  let currentFoveation=1,recoveryFade=0;
   let measuredSeconds=0,measuredFrames=0;
   let loading=null,loadPhase=null,compileReady=false,loadStarted=0,readyAt=0;
   renderer.xr.enabled = true;
@@ -6104,11 +6240,12 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   function tourCommand(action){
     if(loading)return 'Aguarde o carregamento do VR.';
     camera.getWorldPosition(head);const tour=getTour();
-    if(action==='start'||tourOwner!==tour){tourBody.x=head.x;tourBody.y=floorLevel+getPhysics().eyeHeight;tourBody.z=head.z;tourOwner=tour;}
+    if(action==='start'||tourOwner!==tour){tourBody.x=head.x;tourBody.y=head.y;tourBody.z=head.z;tourOwner=tour;calibrateSeatedTour();}
     const beforeX=tourBody.x,beforeY=tourBody.y,beforeZ=tourBody.z;
     try{
-      tour?.action(action,tourBody);
+      tour?.action(action,tourBody,rig.rotation.y+seatedHeadYaw);
       if(action==='stop'){
+        if(Math.hypot(tourBody.x-beforeX,tourBody.y-beforeY,tourBody.z-beforeZ)>.05)recoveryFade=1;
         rig.position.x+=tourBody.x-beforeX;rig.position.y+=tourBody.y-beforeY;rig.position.z+=tourBody.z-beforeZ;
         floorLevel=tourBody.y-getPhysics().eyeHeight;
         rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);camera.getWorldPosition(head);
@@ -6125,6 +6262,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       rig.scale.setScalar(1/amplitude);rig.updateMatrixWorld(true);camera.getWorldPosition(head);
       rig.position.x+=before.x-head.x;rig.position.y+=before.y-head.y;rig.position.z+=before.z-head.z;
       rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);
+      if(getTour()?.state.active&&tourOwner){seatedEye.set(tourBody.x,tourBody.y,tourBody.z);rig.worldToLocal(seatedEye);}
       return amplitude===1?'Escala visual normal.':'Sensação de espaço ampliada. As medidas do projeto não mudaram.';
     }
     if(getTour()?.state.active)getTour().stop('Casa alterada. Inicie novamente para recalcular o tour.');
@@ -6202,7 +6340,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     const tour=getTour();
     const automatic=!!tour?.state.active;
     if(!automatic)tourOwner=null;
-    else if(tourOwner!==tour){tourBody.x=head.x;tourBody.y=floorLevel+physics.eyeHeight;tourBody.z=head.z;tourOwner=tour;}
+    else if(tourOwner!==tour){tourBody.x=head.x;tourBody.y=head.y;tourBody.z=head.z;tourOwner=tour;calibrateSeatedTour();}
     if(panel?.visible||tour?.state.active)forward=right=turn=0;
     rig.updateMatrixWorld(true);
     const trackedHands=handVisuals.filter(item=>item.visual.update()).map(item=>item.hand);
@@ -6221,6 +6359,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       const moveX=body.x-fromX,moveZ=body.z-fromZ;
       rig.position.x += moveX; rig.position.z += moveZ;
       const nextFloor=body.y-physics.eyeHeight,moveY=nextFloor-floorLevel;rig.position.y+=moveY;floorLevel=nextFloor;
+      if(automatic)guideTourHeading(tour);
       if (Math.abs(turn)<0.25) snapReady=true;
       if (Math.abs(turn)>0.65 && snapReady) {
         snapReady=false;
@@ -6231,7 +6370,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
         const after=camera.getWorldPosition(new Vector3());
         rig.position.x+=before.x-after.x; rig.position.z+=before.z-after.z;
       }
-      lastSafeHead=automatic?{x:head.x+moveX,y:head.y+moveY,z:head.z+moveZ}:{x:body.x,y:body.y,z:body.z};
+      if(automatic){camera.getWorldPosition(turnAfter);lastSafeHead={x:turnAfter.x,y:turnAfter.y,z:turnAfter.z};}
+      else lastSafeHead={x:body.x,y:body.y,z:body.z};
       physics.update(delta,automatic?null:lastSafeHead);
     }
     rig.updateMatrixWorld(true);
@@ -6247,7 +6387,8 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       const hit=hits[i]||(!panel?.visible&&physics.raycastDoor?.(rayOrigin,rayDirection));
       pointer?.update(hit,amplitude);
     });
-    const fade=tour?.state.fade||0;if(curtain.material)curtain.material.opacity=curtain.visible?1:fade;curtain.visible=curtain.visible||fade>0;
+    const fade=Math.max(tour?.state.fade||0,recoveryFade);recoveryFade=Math.max(0,recoveryFade-delta/.35);
+    if(curtain.material)curtain.material.opacity=curtain.visible?1:fade;curtain.visible=curtain.visible||fade>0;
     renderer.info.reset();
     renderer.render(scene,camera);
     frames++;
@@ -6285,7 +6426,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       rig=new Group(); scene.add(rig); rig.add(camera);
       const p=getPhysics(), spawn=p.spawn;
       rig.position.set(spawn.x,p.floorAt(spawn.x,spawn.z),spawn.z);
-      floorLevel=p.floorAt(spawn.x,spawn.z);amplitude=1;menuPressed=false;exitHeldSince=null;ending=false;frameError=null;frames=0;
+      floorLevel=p.floorAt(spawn.x,spawn.z);amplitude=1;menuPressed=false;exitHeldSince=null;ending=false;frameError=null;frames=0;recoveryFade=0;
       handWalk?.reset();handPauseUntil=0;measuredSeconds=0;measuredFrames=0;
       camera.position.set(0,0,0); camera.rotation.set(0,0,0); camera.clearViewOffset();
       curtain=makeCurtain(); curtain.visible=false; camera.add(curtain);
@@ -6410,7 +6551,7 @@ function tourAction(action){
   if(questMode?.active)return questMode.tourAction(action);
   try{
     if(action==='start'&&!walkMode.active)walkMode.start({capture:false});
-    houseTour.action(action,Je.position);if(houseTour.state.active)walkMode.releaseForTour();
+    houseTour.action(action,Je.position,walkMode.heading);if(houseTour.state.active)walkMode.releaseForTour(action==='start');
   }catch(error){et('tour-room').textContent=error.message;et('tour-hud').hidden=false;}
   updateTourHUD();Gn();
 }

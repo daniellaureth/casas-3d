@@ -75,13 +75,13 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
     } else if(page==='tour') {
       const tour=s.tour||{};
       item('tour-start','Tour automático',35,195,970,68,()=>choose('tour','start'),!!tour.active);
-      text('Tour da casa'+(tour.total?' · '+(tour.index+1)+' / '+tour.total:''),35,310,30);text(tour.active?tour.label:'Cômodos, fachada e vistas aéreas do terreno.',35,352,26);
+      text('Tour sentado'+(tour.total?' · '+(tour.index+1)+' / '+tour.total:''),35,310,30);text(tour.active?tour.label:'Visão elevada · Cômodos, fachada e terreno.',35,352,26);
       item('tour-pause','Pausar',35,385,475,62,()=>choose('tour','pause'),false,!tour.active||tour.paused);
       item('tour-resume','Continuar',530,385,475,62,()=>choose('tour','resume'),false,!tour.active||!tour.paused);
       item('tour-next','Próximo ambiente',35,465,475,62,()=>choose('tour','next'),false,!tour.active);
       item('tour-previous','Ambiente anterior',530,465,475,62,()=>choose('tour','previous'),false,!tour.active);
       item('tour-stop','Encerrar tour',35,545,970,62,()=>choose('tour','stop'),false,!tour.active);
-      wrap(tour.message||'Olhe livremente. O tour move apenas a sua posição.',35,657,970,24);
+      wrap(tour.message||'Sente-se olhando à frente ao iniciar. O tour guia a visão; você pode olhar para os lados.',35,657,970,24);
     } else {
       text('SENSAÇÃO DE ESPAÇO',35,224,25);
       [[1,'Normal'],[1.4,'Ampla'],[2,'Muito ampla']].forEach(([value,label],i)=>item('amplitude-'+value,label,35+i*326,252,312,78,()=>choose('amplitude',value),s.amplitude===value));

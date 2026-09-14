@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../walk-camera.js'), 'utf8');
 
-function setup(lock = 'success') {
+function setup(lock = 'success', tour=null) {
   const events = {};
   const windowEvents = {};
   const vector = (x = 0, y = 0, z = 0) => ({ x, y, z,
@@ -33,7 +33,7 @@ function setup(lock = 'success') {
   const controls = {target: vector(0, 1, 0), enabled: true};
   const context = vm.createContext({document, window: {addEventListener: (name, handler) => windowEvents[name] = handler}});
   const create = vm.runInContext(source + '\ncreateWalkCamera', context);
-  const mode = create({camera, controls, canvas, stopTour() {}, finishHouse() {}, resize() {}, invalidate() {}, getPlan: () => ({d: 9})});
+  const mode = create({camera, controls, canvas, stopTour() {}, finishHouse() {}, resize() {}, invalidate() {}, getPlan: () => ({d: 9}),getTour:()=>tour});
   const emit = (type, data = {}) => events[type]({preventDefault() {}, ...data});
   return {mode, camera, controls, canvas, document, hint, start: () => button.onclick(), emit, windowEvents};
 }
@@ -57,6 +57,17 @@ test('walking uses horizontal direction and normalized diagonal speed', () => {
   assert.equal(f.camera.position.y, 1.65);
   f.emit('keyup', {code: 'KeyW'}); f.emit('keyup', {code: 'KeyD'});
   assert.equal(f.mode.update(0.1), false);
+});
+
+test('desktop guided framing retains mouse look, blocks walking and restarts without a view jump',()=>{
+  const tour={state:{active:false,paused:false,heading:0,focus:{x:0,y:1.65,z:0}},update(position,dt){position.x+=dt*.8;},stop(){this.state.active=false;}};
+  const f=setup('success',tour);f.start();tour.state.active=true;f.mode.releaseForTour(true);
+  f.emit('keydown',{code:'KeyW'});const z=f.camera.position.z;f.mode.update(.1);assert.equal(f.camera.position.z,z,'manual walking stays blocked');
+  f.emit('mousemove',{target:f.canvas,movementX:100});const offset=f.camera.rotation.y;
+  tour.state.heading=.4;f.mode.update(.1);assert.ok(Math.abs(f.camera.rotation.y-(.4+offset))<1e-9,'mouse look remains relative to the guided direction');
+  const before=f.camera.rotation.y;tour.state.heading=f.mode.heading;f.mode.releaseForTour(true);f.mode.update(.1);
+  assert.equal(f.camera.rotation.y,before,'restarting captures the current forward direction once');
+  tour.stop();f.emit('keydown',{code:'KeyW'});f.mode.update(.1);assert.ok(f.camera.position.z<z,'manual controls return after tour');
 });
 
 test('Escape restores camera, field of view and orbit controls', () => {

@@ -4,7 +4,7 @@ function tourAction(action){
   if(questMode?.active)return questMode.tourAction(action);
   try{
     if(action==='start'&&!walkMode.active)walkMode.start({capture:false});
-    houseTour.action(action,Je.position);if(houseTour.state.active)walkMode.releaseForTour();
+    houseTour.action(action,Je.position,walkMode.heading);if(houseTour.state.active)walkMode.releaseForTour(action==='start');
   }catch(error){et('tour-room').textContent=error.message;et('tour-hud').hidden=false;}
   updateTourHUD();Gn();
 }

@@ -6,7 +6,7 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
   const published=process.argv.find(arg=>arg.startsWith('--url='))?.slice(6);
   const base=published||'http://127.0.0.1:'+server.address().port+'/casas-3d/';
   const profile=fs.mkdtempSync(path.join(os.tmpdir(),'casas-standalone-'));
-  const browser=spawn(path.join(process.env.ProgramFiles,'Google/Chrome/Application/chrome.exe'),['--app=about:blank','--user-data-dir='+profile,'--no-first-run','--no-default-browser-check','--window-size=1440,1000','--remote-debugging-port=0','--force_high_performance_gpu'],{stdio:'ignore'});
+  const browser=spawn(path.join(process.env.ProgramFiles,'Google/Chrome/Application/chrome.exe'),['--app=about:blank','--user-data-dir='+profile,'--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows','--disable-features=CalculateNativeWinOcclusion','--no-first-run','--no-default-browser-check','--window-size=1440,1000','--remote-debugging-port=0','--force_high_performance_gpu'],{stdio:'ignore'});
   let ws;const report=[];
   try{
     const portFile=path.join(profile,'DevToolsActivePort');for(let i=0;i<60&&!fs.existsSync(portFile);i++)await delay(500);
@@ -40,7 +40,7 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
       await evaluate("document.querySelectorAll('.facade-choice')[0].click()");await settled();
       if(process.argv.includes('--experiences')){
         const click=id=>evaluate('document.getElementById('+JSON.stringify(id)+').click()');
-        const waitFor=async expression=>{for(let i=0;i<600;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out '+expression);};
+        const waitFor=async expression=>{for(let i=0;i<3000;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out '+expression);};
         assert.equal(await evaluate('document.querySelectorAll("#day,#night").length'),0,'day/night removed');
         await click('auto-tour');await waitFor('casaDebug().automaticTour.phase!=="planning"');
         assert.equal(await evaluate('casaDebug().walking'),true,'tour starts from overview in first person');
@@ -53,7 +53,7 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
         const aerialIndex=(await evaluate('casaDebug().automaticTour.total'))-4;
         for(let i=index;i<aerialIndex;i++){await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');}
         await waitFor('casaDebug().automaticTour.phase==="dwell"');
-        const aerial=await evaluate('casaDebug()');assert.ok(aerial.camera[1]>4);assert.ok(aerial.cameraRotation[0]<-.1,'desktop aerial view frames the house');
+        const aerial=await evaluate('casaDebug()');assert.ok(aerial.camera[1]>3.5);assert.ok(aerial.cameraRotation[0]>=-.31&&aerial.cameraRotation[0]<0,'desktop exterior view needs only a gentle downward angle');
         const aerialShot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-aerial-'+(quest?'quest':'desktop')+'.png'),Buffer.from(aerialShot.data,'base64'));
         await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);assert.equal(await evaluate('casaDebug().walking'),true,'normal first-person controls restored');
         assert.ok((await evaluate('casaDebug().camera'))[1]<2.2,'aerial cancellation restores ground height');

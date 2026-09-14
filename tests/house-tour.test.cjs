@@ -12,12 +12,17 @@ test('all furnished plans visit every room and the actual lot, without visible w
  for(const model of ['50','60','62','69'].filter(m=>!process.env.TOUR_MODEL||process.env.TOUR_MODEL===m)){
   const f=fixture(model),start=performance.now();f.tour.start(f.position);const prepareMs=performance.now()-start;
   assert.ok(f.tour.points.length>=5,model+' destinations '+f.tour.points.map(p=>p.label));let maxSpeed=0,iterations=0;
-  const visited=new Set();
+  const visited=new Set();let previousHeading=f.tour.state.heading;
   while(f.tour.state.active&&iterations++<14000){const x=f.position.x,y=f.position.y,z=f.position.z;f.tour.update(f.position,.05);f.physics.update(.05,null);
-   if(f.tour.state.phase==='dwell')visited.add(f.tour.state.index);
+   if(f.tour.state.phase==='dwell'){
+    visited.add(f.tour.state.index);const p=f.tour.points[f.tour.state.index];
+    assert.ok(Math.abs(Math.atan2(Math.sin(f.tour.state.heading-p.heading),Math.cos(f.tour.state.heading-p.heading)))<1e-4,'subject is ahead at every stop');
+   }
+   if(f.tour.state.active&&f.tour.state.fade<1)assert.ok(Math.abs(Math.atan2(Math.sin(f.tour.state.heading-previousHeading),Math.cos(f.tour.state.heading-previousHeading)))<=T.config.turnSpeed*Math.PI/180*.05+1e-7,'visible yaw is slow');
+   previousHeading=f.tour.state.heading;
    const moved=Math.hypot(f.position.x-x,f.position.y-y,f.position.z-z);
    if(f.tour.state.fade<1){maxSpeed=Math.max(maxSpeed,moved/.05);assert.equal(f.physics.headBlocked(f.position.x,f.position.z,f.position.y),false,model+' visible camera in a wall at '+JSON.stringify({state:f.tour.state,position:f.position}));}
-   if(moved>.05)assert.equal(f.tour.state.fade,1,'only relocate while fully faded');
+   assert.equal(f.tour.state.fade,0,'continuous flight never blacks out');assert.ok(moved<=.041,'no jumps between viewpoints');
    assert.equal(f.tour.state.paused,false,model+' '+JSON.stringify(f.tour.state));}
   assert.equal(f.tour.state.active,false,model+' finishes');assert.ok(maxSpeed<=.851);assert.ok(f.physics.doors.some(d=>Math.abs(d.angle)>.1));
   assert.equal(visited.size,f.tour.points.length,'every viewpoint was actually visited');
@@ -28,7 +33,7 @@ test('all furnished plans visit every room and the actual lot, without visible w
  }
 });
 
-test('tour ignores furniture but never silently omits a disconnected room',()=>{
+test('tour reports a disconnected room without a blackout, wall crossing or omitted destination',()=>{
  const boxes=[{minX:-.1,maxX:.1,minZ:-20,maxZ:20,bottom:0,top:3},{minX:.4,maxX:1.6,minZ:-1,maxZ:1,bottom:0,top:1.2,kind:'furniture'}];
  const physics=Object.assign(T.createWalkPhysics({boxes}),{spawn:{x:-1,z:0}}),position={x:-1,y:1.65,z:0};
  const config={...T.config,dwell:0,stops:[{id:'entry',kind:'entry'},{id:'room',room:'Sala'}]};
@@ -36,14 +41,14 @@ test('tour ignores furniture but never silently omits a disconnected room',()=>{
  const tour=T.createHouseTour({getPhysics:()=>physics,getPlan:()=>plan,getModel:()=> 'test',config});tour.start(position);
  assert.equal(tour.points.length,2);assert.equal(physics.blocked(tour.points[1].x,tour.points[1].z),true,'target would block a walking body');
  for(let i=0;i<3000&&tour.state.active;i++){tour.update(position,.05);if(tour.state.fade<1)assert.equal(physics.headBlocked(position.x,position.z,position.y),false);}
- assert.equal(tour.state.active,false);assert.equal(physics.blocked(position.x,position.z),false,'cancel/end restores walking clearance');
+ assert.equal(tour.state.phase,'unavailable');assert.equal(tour.state.paused,true);assert.equal(tour.state.fade,0);assert.match(tour.state.message,/passagem livre/);tour.stop();assert.equal(physics.blocked(position.x,position.z),false,'cancel/end restores walking clearance');
 });
 
 test('canceling an aerial segment restores ground height and a clear walking position',()=>{
  const f=fixture('69');f.tour.start(f.position);
  for(let i=0;i<f.tour.points.findIndex(p=>p.kind==='aerial');i++)f.tour.action('next',f.position);
- for(let i=0;i<30;i++)f.tour.update(f.position,.05);
- assert.ok(f.position.y>=f.physics.tourAltitude-.01);f.tour.stop();
+ for(let i=0;i<7000&&f.tour.state.phase!=='dwell';i++)f.tour.update(f.position,.05);
+ assert.ok(f.position.y>=f.tour.points[f.tour.state.index].y-.01);f.tour.stop();
  assert.equal(f.position.y,f.physics.floorAt(f.position.x,f.position.z)+f.physics.eyeHeight);assert.equal(f.physics.blocked(f.position.x,f.position.z),false);
 });
 
@@ -54,16 +59,26 @@ test('all facades and garage choices keep complete room itineraries on every pla
   const position={...physics.spawn,y:physics.floorAt(physics.spawn.x,physics.spawn.z)+physics.eyeHeight};
   // Serialize exactly as the worker does: enabled predicates and mesh callbacks
   // cannot be transferred, but lot bounds, altitude and furniture tags must survive.
-  const clone=Object.assign(T.createWalkPhysics({boxes:physics.boxes.filter(b=>!b.enabled||b.enabled()).map(({enabled,...b})=>b),floors:physics.floors,doors:physics.doors.map(({apply,...d})=>({...d,angle:d.openAngle}))}),{spawn:physics.spawn,site:physics.site,tourAltitude:physics.tourAltitude});
+  const clone=Object.assign(T.createWalkPhysics({boxes:physics.boxes.filter(b=>!b.enabled||b.enabled()).map(({enabled,...b})=>b),floors:physics.floors,doors:physics.doors.map(({apply,...d})=>({...d,angle:d.openAngle}))}),{spawn:physics.spawn,site:physics.site,tourAltitude:physics.tourAltitude,roofTop:physics.roofTop,flightBoxes:physics.flightBoxes});
   const nav=T.buildHouseTour({physics:clone,plan:house.userData.plan,model,position});
   const expected=T.config.stops.filter(s=>!s.room||house.userData.plan.rooms.some(r=>new RegExp(s.room,'i').test(r[0])));
   assert.equal(nav.points.length,expected.length,JSON.stringify({model,facade,garage,high}));
+  for(let i=0;i<nav.legs.length;i++){
+   const leg=nav.legs[i];assert.ok(leg,'continuous connection '+JSON.stringify({model,facade,garage,high,from:nav.points[i].id,to:nav.points[i+1].id}));
+   for(let j=1;j<leg.length;j++){
+    const a=leg[j-1],b=leg[j],steps=Math.ceil(Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z)/.05);
+    for(let s=0;s<=steps;s++){const t=steps?s/steps:0;assert.equal(clone.headBlocked(a.x+(b.x-a.x)*t,a.z+(b.z-a.z)*t,a.y+(b.y-a.y)*t),false,'flight crosses wall '+JSON.stringify({model,facade,garage,high,from:nav.points[i].id,to:nav.points[i+1].id,a,b}));}
+    if(nav.points[i].kind==='aerial'||nav.points[i+1].kind==='aerial')assert.ok(nav.flightClear(a,b),'outdoor flight clears roofs');
+   }
+  }
   for(const p of nav.points)assert.equal(clone.headBlocked(p.x,p.z,p.y),false,p.label+' is outside walls');
   for(const p of nav.points.filter(p=>p.kind==='aerial')){
-   assert.ok(p.y>=new T.Box3().setFromObject(house).max.y+1.49);
+   assert.ok(p.y>=3.8&&p.y<=4.5,'elevated oblique exterior view');
    const x=p.x+house.userData.plan.w/2,z=house.userData.plan.d/2-p.z;
-   assert.ok(x>physics.site.x0&&x<physics.site.x1&&z>physics.site.z0&&z<physics.site.z1,'aerial point follows this lot');
+   assert.ok(x<physics.site.x0||x>physics.site.x1||z<physics.site.z0||z>physics.site.z1,'orbit remains outside lot walls and roofs');
+   assert.ok(Math.atan2(p.y-p.focus.y,Math.hypot(p.x-p.focus.x,p.z-p.focus.z))<Math.PI/9,'no steep downward gaze required');
   }
+  for(const p of nav.points.filter(p=>p.roomName))assert.ok(p.y-clone.floorAt(p.x,p.z)>=1.94,'higher interior viewpoint');
   cases++;
  }
  console.log('Validated facade/garage/ceiling combinations:',cases);

@@ -13,7 +13,7 @@ function installXR(){
     requestReferenceSpace(){return Promise.resolve({});}
     requestAnimationFrame(fn){return requestAnimationFrame(t=>{
       if(this.ended)return;const x=window.testHeadMotion?.004*Math.sin(t*.012):0,z=window.testHeadMotion?.003*Math.cos(t*.015):0;
-      fn(t,window.lastXRFrame={session:this,getViewerPose:()=>({transform:{matrix:matrix(x,1.7,z)},views:['left','right'].map(eye=>({eye,projectionMatrix:projection,transform:{matrix:matrix(x+(eye==='left'?-.032:.032),1.7,z)}}))}),getPose:()=>({transform:{matrix:window.testRayMatrix||matrix(0,1.3,-.3)}})});
+      fn(t,window.lastXRFrame={session:this,getViewerPose:()=>({transform:{matrix:matrix(x,1.15,z)},views:['left','right'].map(eye=>({eye,projectionMatrix:projection,transform:{matrix:matrix(x+(eye==='left'?-.032:.032),1.15,z)}}))}),getPose:()=>({transform:{matrix:window.testRayMatrix||matrix(0,.9,-.3)}})});
     });}
     cancelAnimationFrame(id){cancelAnimationFrame(id);}
     async end(){this.ended=true;this.dispatchEvent(new Event('end'));}
@@ -24,10 +24,10 @@ function installXR(){
 (async()=>{
  const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'Casas3D.html'),'utf8').replace('return createQuestPanel({...options','return window.testPanel=createQuestPanel({...options').replace('const failedSession=session;', 'console.error(error);const failedSession=session;').replace('// END NAVIGATION MODULES',`// END NAVIGATION MODULES
  window.holdXRCompile=()=>{const original=ee.compileAsync.bind(ee);ee.compileAsync=(...args)=>Promise.all([original(...args),new Promise(r=>setTimeout(r,1200))]);};
- window.pointXR=id=>{const b=window.testPanel.buttons.find(b=>b.id===id);const point=window.testPanel.root.localToWorld(new q(((b.x+b.w/2)/1040-.5)*1.04,(.5-(b.y+b.h/2)/820)*.82,0));Je.parent.worldToLocal(point);const origin=new q(0,1.3,-.3),rotation=new ii().setFromUnitVectors(new q(0,0,-1),point.sub(origin).normalize());window.testRayMatrix=new $t().compose(origin,rotation,new q(1,1,1)).toArray();};
+ window.pointXR=id=>{const b=window.testPanel.buttons.find(b=>b.id===id);const point=window.testPanel.root.localToWorld(new q(((b.x+b.w/2)/1040-.5)*1.04,(.5-(b.y+b.h/2)/820)*.82,0));Je.parent.worldToLocal(point);const origin=new q(0,.9,-.3),rotation=new ii().setFromUnitVectors(new q(0,0,-1),point.sub(origin).normalize());window.testRayMatrix=new $t().compose(origin,rotation,new q(1,1,1)).toArray();};
  window.inspectXR=()=>({debug:casaDebug(),tourPoints:houseTour.points,spawn:walkPhysics.spawn,foveation:ee.xr.getFoveation(),lights:Tn.children.filter(o=>o.isLight).map(o=>({type:o.type,visible:o.visible,intensity:o.intensity})),camera:Je.matrixWorld.toArray(),eyes:ee.xr.getCamera().cameras.map(c=>({world:c.matrixWorld.toArray(),projection:c.projectionMatrix.toArray()}))});`);
  const server=http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(html.replace('<head>',()=>'<head><script>('+installXR.toString()+')()</script>'));});await new Promise(r=>server.listen(0,'127.0.0.1',r));
- const profile=fs.mkdtempSync(path.join(os.tmpdir(),'casas-xr-')),browser=spawn(path.join(process.env.ProgramFiles,'Google/Chrome/Application/chrome.exe'),['--app=about:blank','--user-data-dir='+profile,'--no-first-run','--no-default-browser-check','--window-size=1440,950','--remote-debugging-port=0'],{stdio:'ignore'});let ws;
+ const profile=fs.mkdtempSync(path.join(os.tmpdir(),'casas-xr-')),browser=spawn(path.join(process.env.ProgramFiles,'Google/Chrome/Application/chrome.exe'),['--app=about:blank','--user-data-dir='+profile,'--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows','--disable-features=CalculateNativeWinOcclusion','--no-first-run','--no-default-browser-check','--window-size=1440,950','--remote-debugging-port=0'],{stdio:'ignore'});let ws;
  try{
   const portFile=path.join(profile,'DevToolsActivePort');for(let i=0;i<60&&!fs.existsSync(portFile);i++)await delay(250);
   const port=fs.readFileSync(portFile,'utf8').split('\n')[0],pages=await(await fetch('http://127.0.0.1:'+port+'/json/list')).json();ws=new WebSocket(pages.find(p=>p.type==='page').webSocketDebuggerUrl);await new Promise(r=>ws.onopen=r);
@@ -51,17 +51,17 @@ function installXR(){
   if(!process.argv.includes('--keep-facade')){await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');await delay(200);assert.notEqual(await evaluate('casaDebug().facade'),state.debug.facade);}
   if(process.argv.includes('--experiences')){
     const click=async id=>{await evaluate('pointXR('+JSON.stringify(id)+')');await delay(40);await evaluate('testSession.dispatchEvent(Object.assign(new Event("select"),{inputSource:testSession.inputSources[0],frame:lastXRFrame}))');};
-    const waitFor=async(expression,attempts=400)=>{for(let i=0;i<attempts;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out: '+expression+' '+JSON.stringify(await evaluate('casaDebug()')));};
+    const waitFor=async(expression,attempts=3000)=>{for(let i=0;i<attempts;i++){if(await evaluate(expression))return;await delay(50);}throw Error('Timed out: '+expression+' '+JSON.stringify(await evaluate('casaDebug()')));};
     const menu=async()=>{await evaluate('testSession.inputSources[0].gamepad.buttons[5]={pressed:true}');await delay(50);await evaluate('testSession.inputSources[0].gamepad.buttons[5].pressed=false');await delay(50);};
     const before=await evaluate('casaDebug()');assert.equal(await evaluate('document.querySelectorAll("#day,#night").length'),0);
     await evaluate('window.testHeadMotion=true');await click('tour-quick');
-    await waitFor('casaDebug().automaticTour.index>=2 && casaDebug().automaticTour.active',1400);
+    await waitFor('casaDebug().automaticTour.index>=2 && casaDebug().automaticTour.active',3000);
     assert.equal(await evaluate('casaDebug().automaticTour.paused'),false,'entrance and living room advance without clicking Next');
     console.log('Automatic VR arrival with head motion',JSON.stringify(await evaluate('casaDebug().automaticTour')));
     await menu();await click('tab-passeio');await evaluate('window.testHeadMotion=false');await delay(80);await click('go-entry');
     assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
     await click('tour-quick');assert.equal(await evaluate('casaDebug().automaticTour.active'),true);
-    await waitFor('casaDebug().automaticTour.phase!=="planning"');await menu();await click('tab-tour');await click('tour-pause');const paused=await evaluate('casaDebug().vr.head');await delay(250);assert.deepEqual(await evaluate('casaDebug().vr.head'),paused);
+    await waitFor('casaDebug().automaticTour.phase!=="planning"');await menu();await click('tab-tour');await click('tour-pause');const paused=await evaluate('casaDebug().vr.head');await delay(250);const still=await evaluate('casaDebug().vr.head');assert.ok(Math.hypot(...still.map((v,i)=>v-paused[i]))<1e-8,'pausing holds the seated base');
     await click('tour-resume');assert.equal(await evaluate('casaDebug().automaticTour.paused'),false);
     await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),1);
     const origin=await evaluate('casaDebug().vr.head');await waitFor('Math.hypot(casaDebug().vr.head[0]-('+origin[0]+'),casaDebug().vr.head[2]-('+origin[2]+'))>.15');
@@ -69,13 +69,21 @@ function installXR(){
     await click('tour-previous');await waitFor('casaDebug().automaticTour.phase!=="planning"');assert.equal(await evaluate('casaDebug().automaticTour.index'),0);
     await click('tab-tour');
     const aerialIndex=await evaluate('inspectXR().tourPoints.findIndex(p=>p.kind==="aerial")');
-    for(let i=0;i<aerialIndex;i++){await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');}
+    if(process.argv.includes('--seated-shots'))for(let i=1;i<aerialIndex;i++){
+      await click('tour-next');await waitFor('casaDebug().automaticTour.index==='+i+' && casaDebug().automaticTour.phase==="dwell"',3000);
+      await click('tour-pause');await click('close');await delay(100);
+      const p=await evaluate('inspectXR().tourPoints[casaDebug().automaticTour.index]'),photo=await send('Page.captureScreenshot',{format:'png'});
+      fs.writeFileSync(path.join(__dirname,'seated-'+(selectedModel||'50')+'-'+p.id+'.png'),Buffer.from(photo.data,'base64'));
+      console.log('Seated framing',p.label,JSON.stringify(await evaluate('casaDebug().vr.head')));
+      await menu();await click('tab-tour');await click('tour-resume');
+    }
+    for(let i=await evaluate('casaDebug().automaticTour.index');i<aerialIndex;i++){await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');}
     await waitFor('casaDebug().automaticTour.phase==="dwell"');
-    assert.ok((await evaluate('casaDebug().vr.head'))[1]>4,'aerial viewpoint is above the roof');
-    await click('close');await evaluate('window.testPitch=-.7');await delay(300);
+    assert.ok((await evaluate('casaDebug().vr.head'))[1]>3.5,'exterior viewpoint is elevated');
+    await click('close');await delay(300);
     assert.equal(await evaluate('inspectXR().foveation'),.5,'compact tour controls remain legible');
     const aerialShot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-aerial.png'),Buffer.from(aerialShot.data,'base64'));
-    await evaluate('window.testPitch=0');await menu();await click('tab-tour');await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
+    await menu();await click('tab-tour');await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
     assert.ok((await evaluate('casaDebug().vr.head'))[1]<2.2,'canceling aerial tour lands the visitor');
     await click('tour-start');await evaluate('testSession.end()');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
     await evaluate('document.getElementById("quest-vr").click()');await waitFor('casaDebug().vr.active&&casaDebug().vr.panelOpen');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);

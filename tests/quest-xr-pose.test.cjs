@@ -21,7 +21,7 @@ function fixture(model='50',panelFactory,extra={}) {
     const projection=new T.PerspectiveCamera(90,1,.1,500).projectionMatrix.toArray();
     const rotation=new T.Quaternion().setFromAxisAngle(new T.Vector3(0,1,0),yaw);
     rotation.multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(1,0,0),pitch)).multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0,0,1),roll));
-    const views=['left','right'].map(eye=>({eye,projectionMatrix:projection,transform:{matrix:new T.Matrix4().compose(new T.Vector3(x+(eye==='left'?-.032:.032),y,z),rotation,new T.Vector3(1,1,1)).toArray()}}));
+    const views=['left','right'].map(eye=>({eye,projectionMatrix:projection,transform:{matrix:new T.Matrix4().compose(new T.Vector3(eye==='left'?-.032:.032,0,0).applyQuaternion(rotation).add(new T.Vector3(x,y,z)),rotation,new T.Vector3(1,1,1)).toArray()}}));
     callback(time,{getViewerPose:()=>tracked?{views}:null});
     return {head:camera.getWorldPosition(new T.Vector3()).toArray(),curtain:curtain.visible,rig:camera.parent?.position.toArray(),tracking:rotation};
   }
@@ -33,7 +33,7 @@ test('automatic tour leaves the entrance and visits rooms with continuous tracke
     let tour;const f=fixture(model,undefined,{getTour:()=>tour});
     tour=f.api.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=>model});
     await f.mode.enter();f.tick(0);f.mode.tourAction('start');const seen=new Set();let i=0;
-    while(tour.state.active&&i++<72*400){
+    while(tour.state.active&&i++<72*600){
       const pose=f.tick(i*1000/72,{x:.004*Math.sin(i*.17),z:.003*Math.cos(i*.21),yaw:.15*Math.sin(i*.04),pitch:.05*Math.sin(i*.03),roll:.02*Math.cos(i*.06)});
       seen.add(tour.state.index);assert.equal(tour.state.paused,false,model+' '+JSON.stringify(tour.state));
       assert.equal(pose.curtain&&tour.state.fade===0,false,model+' wall protection');
@@ -45,6 +45,30 @@ test('automatic tour leaves the entrance and visits rooms with continuous tracke
     console.log(JSON.stringify({vrModel:model,visited:seen.size,simulatedSeconds:i/72}));
     await f.mode.end();assert.deepEqual(f.errors,[]);
   }
+});
+
+test('seated visitor sees each room ahead while retaining 180 degrees of head movement',async()=>{
+ let tour;const f=fixture('69',undefined,{getTour:()=>tour});
+ tour=f.api.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=> '69',config:{...f.api.config,dwell:.1,stops:f.api.config.stops.map(s=>({...s,dwell:.1}))}});
+ const neutral=.65;await f.mode.enter();f.tick(0,{y:1.15,yaw:neutral});f.mode.tourAction('start');let i=0,previousYaw=f.camera.parent.rotation.y,turns=0;const seen=new Set();
+ while(tour.state.active&&i++<72*600){
+  const side=Math.PI/2*Math.sin(i*.018),pose=f.tick(i*1000/72,{y:1.15,yaw:neutral+side});
+  const rig=f.camera.parent,change=rig.rotation.y-previousYaw;previousYaw=rig.rotation.y;
+  assert.ok(Math.abs(change)<=f.api.config.turnSpeed*Math.PI/180/72+1e-6,'continuous gentle yaw');assert.equal(tour.state.fade,0,'no blackout during flight');if(Math.abs(change)>.001)turns++;
+  assert.equal(rig.rotation.x,0);assert.equal(rig.rotation.z,0);assert.ok(f.camera.quaternion.angleTo(pose.tracking)<1e-7,'head pose is never replaced');
+  if(tour.state.phase==='dwell'){
+   seen.add(tour.state.index);const p=tour.points[tour.state.index],head=f.camera.getWorldPosition(new f.api.Vector3()),look=f.camera.getWorldDirection(new f.api.Vector3());
+   const targetYaw=Math.atan2(head.x-p.focus.x,head.z-p.focus.z),actualYaw=Math.atan2(-look.x,-look.z);
+   const error=Math.atan2(Math.sin(actualYaw-targetYaw-side),Math.cos(actualYaw-targetYaw-side));
+   const calibratedError=Math.atan2(Math.sin(actualYaw-tour.state.heading-side),Math.cos(actualYaw-tour.state.heading-side));
+   assert.ok(Math.abs(calibratedError)<1e-7,'head turning remains relative to the seated forward direction');
+   // Physical/optical eye translations remain free, especially in tiny hallways;
+   // framing must keep the subject ahead without steering against that motion.
+   assert.ok(Math.abs(error)<Math.PI/6,'neutral chair direction faces '+p.label+' '+error);
+   assert.ok(Math.abs(head.y-p.y)<.07,'seated eye height is raised for '+p.label);
+  }
+ }
+ assert.equal(tour.state.active,false,JSON.stringify({state:tour.state,diagnostics:f.mode.diagnostics}));assert.equal(seen.size,tour.points.length);assert.ok(turns>3);await f.mode.end();assert.deepEqual(f.errors,[]);
 });
 test('real Three XR manager keeps a stationary tracked head outside walls',async()=>{
   for(const model of ['50','60','62','69']) {
