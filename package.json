@@ -1,6 +1,6 @@
 {
   "name": "casas-3d",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "private": true,
   "description": "Casas 3D — computador e Meta Quest standalone",
   "scripts": {

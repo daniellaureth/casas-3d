@@ -20,6 +20,29 @@ test('69 m² starts near entrance obstacles instead of repeatedly reporting an u
  assert.ok(tour.state.index>=2,'automatically reaches the living room and continues to the kitchen');tour.stop();
 });
 
+test('street-side start crosses above the closed lot boundary and continues through rooms on every plan',()=>{
+ for(const model of ['50','60','62','69']){
+  const house=T.xx(model,{width:model==='62'?15:12,depth:21}),physics=T.createHousePhysics(house,{Box3:T.Box3}),plan=house.userData.plan,site=physics.site;
+  const position={x:(site.x0+site.x1)/2-plan.w/2,z:plan.d/2-site.z0+3,y:1.7};
+  const nav=T.buildHouseTour({physics,plan,model,position});
+  for(const target of nav.points.slice(0,2)){
+   const path=nav.route(position,target);assert.ok(path,model+' street → '+target.label);
+   for(let i=1;i<path.length;i++)assert.ok(nav.flightClear(path[i-1],path[i]),model+' arrival crosses architecture');
+   assert.ok(Math.max(...path.map(p=>p.y))>physics.roofTop,'arrival flies above closed boundaries');
+  }
+  const tour=T.createHouseTour({getPhysics:()=>physics,getPlan:()=>plan,getModel:()=>model});tour.start(position);
+  assert.equal(tour.state.paused,false,model+' '+JSON.stringify(tour.state));
+  let moved=0;
+  for(let i=0;i<4000&&tour.state.index<2;i++){
+   const previous={...position};tour.update(position,.05);physics.update(.05,null);
+   const step=Math.hypot(position.x-previous.x,position.y-previous.y,position.z-previous.z);moved+=step;
+   assert.ok(step<=.041,'continuous flight without teleportation');assert.equal(tour.state.fade,0);assert.equal(tour.state.paused,false);
+   assert.equal(physics.headBlocked(position.x,position.z,position.y),false,model+' arrival hits wall');
+  }
+  assert.ok(tour.state.index>=2,model+' must visit entry and living room then continue to kitchen');assert.ok(moved>5);tour.stop();
+ }
+});
+
 test('raised tracked eyes inside every house descend smoothly before doorways instead of routing through the roof',()=>{
  for(const model of ['50','60','62','69']){
   const f=fixture(model),nav=T.buildHouseTour({physics:f.physics,plan:f.house.userData.plan,model,position:f.position});
@@ -108,6 +131,11 @@ test('all facades and garage choices keep complete room itineraries on every pla
   const nav=T.buildHouseTour({physics:clone,plan:house.userData.plan,model,position});
   const expected=T.config.stops.filter(s=>!s.room||house.userData.plan.rooms.some(r=>new RegExp(s.room,'i').test(r[0])));
   assert.equal(nav.points.length,expected.length,JSON.stringify({model,facade,garage,high}));
+  const street={x:(physics.site.x0+physics.site.x1)/2-house.userData.plan.w/2,z:house.userData.plan.d/2-physics.site.z0+3,y:1.7};
+  for(const target of nav.points.slice(0,2)){
+   const arrival=nav.route(street,target);assert.ok(arrival,'street arrival '+JSON.stringify({model,facade,garage,high,target:target.id}));
+   for(let i=1;i<arrival.length;i++)assert.ok(nav.flightClear(arrival[i-1],arrival[i]),'street flight clears walls and roofs');
+  }
   for(let i=0;i<nav.legs.length;i++){
    const leg=nav.legs[i];assert.ok(leg,'continuous connection '+JSON.stringify({model,facade,garage,high,from:nav.points[i].id,to:nav.points[i+1].id}));
    for(let j=1;j<leg.length;j++){

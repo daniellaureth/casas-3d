@@ -22,7 +22,7 @@ function installXR(){
   Object.defineProperty(navigator,'xr',{value:{isSessionSupported:async()=>true,requestSession:async()=>window.testSession=new Session()}});
 }
 (async()=>{
- const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'Casas3D.html'),'utf8').replace('return createQuestPanel({...options','return window.testPanel=createQuestPanel({...options').replace('const failedSession=session;', 'console.error(error);const failedSession=session;').replace('// END NAVIGATION MODULES',`// END NAVIGATION MODULES
+ const root=path.join(__dirname,'..'),html=fs.readFileSync(path.join(root,'Casas3D.html'),'utf8').replace('const spawn = physics.spawn;','const spawn = window.testStreetStart || physics.spawn;').replace('return createQuestPanel({...options','return window.testPanel=createQuestPanel({...options').replace('const failedSession=session;', 'console.error(error);const failedSession=session;').replace('// END NAVIGATION MODULES',`// END NAVIGATION MODULES
  window.holdXRCompile=()=>{const original=ee.compileAsync.bind(ee);ee.compileAsync=(...args)=>Promise.all([original(...args),new Promise(r=>setTimeout(r,1200))]);};
  window.pointXR=id=>{const compact=id.startsWith('dock-'),b=(compact?window.testPanel.dockButtons:window.testPanel.buttons).find(b=>b.id===id),board=compact?window.testPanel.dock:window.testPanel.root;const point=board.localToWorld(new q(((b.x+b.w/2)/(compact?1024:1040)-.5)*(compact?.78:1.04),(.5-(b.y+b.h/2)/(compact?320:820))*(compact?.24:.82),0));Je.parent.worldToLocal(point);const origin=new q(0,.9,-.3),rotation=new ii().setFromUnitVectors(new q(0,0,-1),point.sub(origin).normalize());window.testRayMatrix=new $t().compose(origin,rotation,new q(1,1,1)).toArray();};
  const originalTourPost=Worker.prototype.postMessage;Worker.prototype.postMessage=function(data,...args){if(window.failNextTourBuild&&data.type==='build'){window.failNextTourBuild=false;queueMicrotask(()=>this.dispatchEvent(new MessageEvent('message',{data:{id:data.id,error:'Falha de preparação simulada'}})));return;}return originalTourPost.call(this,data,...args);};
@@ -42,6 +42,7 @@ function installXR(){
   console.log('Boot',JSON.stringify(await evaluate('window.CasaLoading?.state')),JSON.stringify(errors));
   const selectedModel=process.argv.find(arg=>arg.startsWith('--model='))?.split('=')[1];
   if(selectedModel){await evaluate('document.getElementById("model").value='+JSON.stringify(selectedModel)+';document.getElementById("model").dispatchEvent(new Event("change"))');await delay(1000);}
+  if(process.argv.includes('--street-start'))await evaluate('(()=>{const lot=casaDebug().lot;window.testStreetStart={x:(lot.x0+lot.x1)/2-lot.houseWidth/2,z:lot.houseDepth/2-lot.z0+3};})()');
   await delay(600);await evaluate('holdXRCompile();document.getElementById("quest-vr").click()');
   let loadingSeen=false;for(let i=0;i<100;i++){const vr=await evaluate('casaDebug().vr');if(vr.loading===75){assert.equal(vr.panelOpen,false);const shot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-loading.png'),Buffer.from(shot.data,'base64'));loadingSeen=true;break;}await delay(25);}assert.ok(loadingSeen,'loading is actually drawn inside XR');
   for(let i=0;i<120;i++){if(await evaluate('casaDebug().vr.panelOpen'))break;await delay(50);}
@@ -79,9 +80,19 @@ function installXR(){
       await menu();await click('tab-passeio');await click('go-entry');
     }
     await evaluate('window.testHeadMotion=true');await click('tour-quick');
+    await waitFor('casaDebug().automaticTour.phase!=="planning"');
+    assert.equal(await evaluate('casaDebug().automaticTour.paused'),false,'the actual initial position must have a valid route');
+    if(process.argv.includes('--street-start')){
+      assert.ok(state.debug.vr.head[2]>state.debug.lot.houseDepth/2-state.debug.lot.z0,'visitor really starts across the wall on the street');
+      await evaluate('window.testHeadMotion=false');await click('dock-tour-pause');const held=await evaluate('casaDebug().vr.head');await delay(250);assert.deepEqual(await evaluate('casaDebug().vr.head'),held);
+      await click('dock-tour-resume');await waitFor('Math.hypot(...casaDebug().vr.head.map((v,i)=>v-'+JSON.stringify(held)+'[i]))>.15');
+      const arrival=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-street-arrival.png'),Buffer.from(arrival.data,'base64'));
+      await evaluate('window.testHeadMotion=true');
+    }
     await waitFor('casaDebug().automaticTour.index>=2 && casaDebug().automaticTour.active',3000);
     assert.equal(await evaluate('casaDebug().automaticTour.paused'),false,'entrance and living room advance without clicking Next');
     console.log('Automatic VR arrival with head motion',JSON.stringify(await evaluate('casaDebug().automaticTour')));
+    if(process.argv.includes('--street-start')){const interior=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'immersive-street-inside.png'),Buffer.from(interior.data,'base64'));}
     await menu();await click('tab-passeio');await evaluate('window.testHeadMotion=false');await delay(80);await click('go-entry');
     assert.equal(await evaluate('casaDebug().automaticTour.active'),false);
     await click('tour-quick');assert.equal(await evaluate('casaDebug().automaticTour.active'),true);

@@ -5525,10 +5525,15 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
   const orbitRadius=Math.hypot(site.x1-site.x0,site.z1-site.z0)/2+3;
   const exteriorFocus={x:center.x,y:1.6,z:center.z};
   function aerial(p){
+    // Street-level visitors are outside the closed lot, even at walking height.
+    // Use the checked takeoff/landing connection rather than asking the ground
+    // grid to find a nonexistent opening through the perimeter wall or gate.
+    const siteX=p.x+plan.w/2,siteZ=plan.d/2-p.z;
+    const outsideLot=siteX<site.x0||siteX>site.x1||siteZ<site.z0||siteZ>site.z1;
     // Standing up/recentring the headset indoors does not put the visitor above
     // the roof. Connect to the indoor route before attempting an exterior flight.
     const indoors=Math.abs(p.x)<plan.w/2+.4&&Math.abs(p.z)<plan.d/2+.4&&p.y<(physics.roofTop||4)+.1;
-    return p.kind==='aerial'||(!indoors&&p.y>physics.floorAt(p.x,p.z)+eye+.25);
+    return p.kind==='aerial'||outsideLot||(!indoors&&p.y>physics.floorAt(p.x,p.z)+eye+.25);
   }
   function viewHeading(p,focus){return Math.atan2(p.x-focus.x,p.z-focus.z);}
   const flightBoxes=[...physics.boxes.filter(b=>b.kind!=='furniture'&&(!b.enabled||b.enabled())),...(physics.flightBoxes||[])];
