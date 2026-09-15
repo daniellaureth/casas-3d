@@ -107,11 +107,12 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
   function drawDock(s){
     const tour=s.tour;dockButtons=[];chipContext.fillStyle='#264e3b';chipContext.fillRect(0,0,1024,320);chipContext.fillStyle='#ffffff';chipContext.textAlign='center';
     if(tour?.active){
-      dockWidth=.78;dockHeight=.24;dock.position.set(0,-.40,-1.1);chipContext.font='600 34px Arial';chipContext.fillText('Tour da casa'+(tour.total?' · '+(tour.index+1)+' / '+tour.total:''),360,58);chipContext.font='600 38px Arial';chipContext.fillText(tour.label+(tour.paused?' · Pausado':''),512,tour.failure?120:143);
-      if(tour.failure){chipContext.font='26px Arial';chipContext.fillText(tour.failure==='route'?'Trajeto indisponível · Continuar para recalcular':'Falha na preparação · Continuar para tentar novamente',512,171);}
-      function button(id,label,x,y,w,h,action,disabled=false){chipContext.fillStyle=disabled?'#5f7766':'#eff3e8';chipContext.fillRect(x,y,w,h);chipContext.fillStyle='#264e3b';chipContext.font='600 30px Arial';chipContext.fillText(label,x+w/2,y+h/2+10);dockButtons.push({id,x,y,w,h,action,disabled});}
-      button('dock-menu','Opções',820,15,184,60,()=>{camera.getWorldPosition(origin);camera.getWorldDirection(direction);open(origin,direction);});
-      [['pause','Pausar'],['resume','Continuar'],['next','Próximo'],['previous','Anterior'],['stop','Encerrar']].forEach(([action,label],i)=>button('dock-tour-'+action,label,20+i*198,205,184,82,()=>{change('tour',action);drawDock(getState());},action==='pause'?tour.paused:action==='resume'?!tour.paused:false));
+      dockWidth=.36;dockHeight=.11;dock.position.set(-.48,-.38,-1.05);
+      chipContext.font='600 52px Arial';chipContext.fillText(tour.label||'Tour da casa',512,76);
+      function button(id,label,x,w,action){chipContext.fillStyle='#eff3e8';chipContext.fillRect(x,135,w,150);chipContext.fillStyle='#264e3b';chipContext.font='600 52px Arial';chipContext.fillText(label,x+w/2,229);dockButtons.push({id,x,y:135,w,h:150,action,disabled:false});}
+      const action=tour.paused?'resume':'pause';
+      button('dock-tour-'+action,tour.paused?'Continuar':'Pausar',20,476,()=>{change('tour',action);drawDock(getState());});
+      button('dock-menu','Opções',528,476,()=>{page='tour';camera.getWorldPosition(origin);camera.getWorldDirection(direction);open(origin,direction);});
     }else{dockWidth=.28;dockHeight=.07;dock.position.set(-.30,-.27,-.9);chipContext.font='82px Arial';chipContext.fillText('Minha casa',512,205);}
     chipMesh.scale.set(dockWidth/.28,dockHeight/.07,1);chipTexture.needsUpdate=true;
   }
@@ -157,7 +158,7 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
     return hits;
   }
   drawDock(getState());
-  return {root,dock,open,place,ensureReachable,beginSelect,endSelect,select,hit,update,draw,get visible(){return root.visible;},get buttons(){return buttons;},get dockButtons(){return dockButtons;},
+  return {root,dock,open,place,ensureReachable,beginSelect,endSelect,select,hit,update,draw,get visible(){return root.visible;},get buttons(){return buttons;},get dockButtons(){return dockButtons;},get dockSize(){return {width:dockWidth,height:dockHeight};},
     close,dispose(){disposed=true;scene.remove(root);camera.remove(dock);board.geometry.dispose();chipMesh.geometry.dispose();material.dispose();chipMaterial.dispose();texture.dispose();chipTexture.dispose();}};
 }
 

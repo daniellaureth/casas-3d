@@ -32,16 +32,16 @@ test('automatic tour leaves the entrance and visits rooms with continuous tracke
   for(const model of ['50','60','62','69'].filter(m=>!process.env.TOUR_MODEL||process.env.TOUR_MODEL===m)){
     let tour;const f=fixture(model,undefined,{getTour:()=>tour});
     tour=f.api.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=>model});
-    await f.mode.enter();f.tick(0);f.mode.tourAction('start');const seen=new Set();let i=0;
+    await f.mode.enter();f.tick(0);f.mode.tourAction('start');const seen=new Set();let i=0,opened=false;
     while(tour.state.active&&i++<72*600){
       const pose=f.tick(i*1000/72,{x:.004*Math.sin(i*.17),z:.003*Math.cos(i*.21),yaw:.15*Math.sin(i*.04),pitch:.05*Math.sin(i*.03),roll:.02*Math.cos(i*.06)});
-      seen.add(tour.state.index);assert.equal(tour.state.paused,false,model+' '+JSON.stringify(tour.state));
+      opened||=f.physics.doors.some(d=>Math.abs(d.angle)>.1);seen.add(tour.state.index);assert.equal(tour.state.paused,false,model+' '+JSON.stringify(tour.state));
       assert.equal(pose.curtain&&tour.state.fade===0,false,model+' wall protection');
       assert.ok(f.camera.quaternion.angleTo(pose.tracking)<1e-7,'head remains tracked');
       if(i===72*25)assert.ok(tour.state.index>0,'must automatically leave Entrada: '+JSON.stringify(tour.state));
     }
     assert.equal(tour.state.active,false,model+' completes every room: '+JSON.stringify(tour.state));
-    assert.equal(seen.size,tour.points.length);assert.equal(f.mode.active,true);assert.ok(f.physics.doors.some(d=>Math.abs(d.angle)>.1));
+    assert.equal(seen.size,tour.points.length);assert.equal(f.mode.active,true);assert.ok(opened);assert.ok(f.physics.doors.every(d=>Math.abs(d.target)<.01));
     console.log(JSON.stringify({vrModel:model,visited:seen.size,simulatedSeconds:i/72}));
     await f.mode.end();assert.deepEqual(f.errors,[]);
   }
@@ -145,4 +145,12 @@ test('VR loading can be canceled while shaders are still preparing',async()=>{
   let options,disposed=0;const f=fixture('50',undefined,{createLoading:o=>{options=o;return {scene:{},percent:10,set(){},update(){},select(){void options.exitVR();},dispose(){disposed++;}};}});
   f.renderer.compileAsync=()=>new Promise(()=>{});await f.mode.enter();f.tick(0);f.tick(16);f.tick(32);
   f.renderer.xr.getController(0).dispatchEvent({type:'select'});await Promise.resolve();assert.equal(f.mode.active,false);assert.equal(disposed,1);
+});
+
+
+test('an invalid physical head offset during the tour recovers before a black frame is rendered',async()=>{
+ let tour;const f=fixture('62',undefined,{getTour:()=>tour});tour=f.api.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=> '62'});
+ await f.mode.enter();f.tick(0);f.mode.tourAction('start');for(let i=1;i<100;i++)f.tick(i*14);
+ const bad=f.tick(1400,{x:8,y:-4,z:3,yaw:.4,pitch:.1,roll:.05});assert.equal(bad.curtain,false);assert.ok(bad.head[1]>1.6);assert.ok(f.camera.quaternion.angleTo(bad.tracking)<1e-7);assert.equal(tour.state.active,true);
+ assert.equal(f.camera.parent.rotation.x,0);assert.equal(f.camera.parent.rotation.z,0);f.mode.tourAction('stop');await f.mode.end();assert.deepEqual(f.errors,[]);
 });

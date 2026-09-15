@@ -62,12 +62,12 @@ test('tour starts from the initial VR panel and remains accessible on every tab 
   f.state.tour={active:true,paused:false,label:'Sala de estar',revision:1};f.panel.close();f.panel.update([],'');
   const children=f.camera.children.length,sceneChildren=f.scene.children.length;
   function selectDock(index,action){
-    const point=f.panel.dock.localToWorld(new T.Vector3(((20+index*198+92)/1024-.5)*.78,(.5-246/320)*.24,0));
+    const b=f.panel.dockButtons.find(b=>b.id==='dock-tour-'+action),size=f.panel.dockSize;const point=f.panel.dock.localToWorld(new T.Vector3(((b.x+b.w/2)/1024-.5)*size.width,(.5-(b.y+b.h/2)/320)*size.height,0));
     const ray=new T.Group();ray.position.copy(f.camera.position);ray.quaternion.setFromUnitVectors(new T.Vector3(0,0,-1),point.sub(ray.position).normalize());ray.updateMatrixWorld(true);
     assert.equal(f.panel.hit(ray).button.id,'dock-tour-'+action);assert.equal(f.panel.select(ray),true);assert.deepEqual(f.changes.at(-1),['tour',action]);
   }
   selectDock(0,'pause');f.state.tour.paused=true;f.state.tour.revision++;f.panel.update([],'');selectDock(1,'resume');
-  selectDock(2,'next');selectDock(3,'previous');selectDock(4,'stop');
+  assert.equal(f.panel.dockButtons.length,2);assert.ok(f.panel.dock.position.x<-.3);f.panel.open(f.camera.position,new T.Vector3(0,0,-1));f.select('tab-tour');for(const action of ['next','previous','stop']){f.select('tour-'+action);assert.deepEqual(f.changes.at(-1),['tour',action]);}
   assert.equal(f.camera.children.length,children);assert.equal(f.scene.children.length,sceneChildren);f.panel.dispose();
 });
 test('safe destinations respect room bounds and avoid new furniture and walls',()=>{
@@ -79,10 +79,10 @@ test('safe destinations respect room bounds and avoid new furniture and walls',(
 test('a pinch stays attached to Continue even if its release ray drifts onto Pause',()=>{
  const f=panelFixture();f.state.tour={active:true,paused:true,label:'Entrada',revision:1};f.panel.close();f.panel.update([],'');
  const ray=new T.Group();ray.position.copy(f.camera.position);
- function aim(index){const point=f.panel.dock.localToWorld(new T.Vector3(((20+index*198+92)/1024-.5)*.78,(.5-246/320)*.24,0));ray.quaternion.setFromUnitVectors(new T.Vector3(0,0,-1),point.sub(ray.position).normalize());ray.updateMatrixWorld(true);}
- aim(1);f.panel.beginSelect?.(ray);aim(0);f.panel.select(ray);assert.deepEqual(f.changes.at(-1),['tour','resume'],'release must activate the button chosen at pinch start');
+ function aim(index){const b=f.panel.dockButtons[index],size=f.panel.dockSize;const point=f.panel.dock.localToWorld(new T.Vector3(((b.x+b.w/2)/1024-.5)*size.width,(.5-(b.y+b.h/2)/320)*size.height,0));ray.quaternion.setFromUnitVectors(new T.Vector3(0,0,-1),point.sub(ray.position).normalize());ray.updateMatrixWorld(true);}
+ aim(0);f.panel.beginSelect?.(ray);aim(1);f.panel.select(ray);assert.deepEqual(f.changes.at(-1),['tour','resume'],'release must activate the button chosen at pinch start');
  const count=f.changes.length;f.state.tour.paused=false;f.state.tour.revision++;f.panel.update([],'');f.panel.select(ray);assert.equal(f.changes.length,count,'one pinch cannot resume then immediately pause');
- f.panel.endSelect?.(ray);f.panel.beginSelect?.(ray);f.panel.select(ray);assert.deepEqual(f.changes.at(-1),['tour','pause'],'a new deliberate pinch can pause');f.panel.dispose();
+ f.panel.endSelect?.(ray);aim(0);f.panel.beginSelect?.(ray);f.panel.select(ray);assert.deepEqual(f.changes.at(-1),['tour','pause'],'a new deliberate pinch can pause');f.panel.dispose();
 });
 
 test('an open panel remains reachable after recentering or walking physically',()=>{

@@ -172,10 +172,10 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
         // Only the desktop camera tilts slightly; XR changes the base yaw only.
         if(focus&&Number.isFinite(tour.state.heading)&&!tour.state.paused){
           const dx=focus.x-camera.position.x,dy=focus.y-camera.position.y,dz=focus.z-camera.position.z;
-          const wantedPitch=Math.max(-.3,Math.min(.1,Math.atan2(dy,Math.hypot(dx,dz))))+tourPitchOffset,blend=tour.state.fade===1?1:Math.min(1,delta*1.2);
+          const wantedPitch=Math.max(tour.state.kind==='aerial'?-.85:-.3,Math.min(.1,Math.atan2(dy,Math.hypot(dx,dz))))+tourPitchOffset,blend=tour.state.fade===1?1:Math.min(1,delta*1.2);
           yaw=tour.state.heading+tourLookOffset;pitch=Math.max(-Math.PI/2+.01,Math.min(Math.PI/2-.01,pitch+(wantedPitch-pitch)*blend));look();
         }
-        const moved=getPhysics()?.update(delta,null);const result=changed||moved||!tour.state.paused;changed=false;return result;
+        const moved=getPhysics()?.update(delta,camera.position);const result=changed||moved||!tour.state.paused;changed=false;return result;
       }
       if (settingsOpen) {
         hint.textContent = 'Edite a casa no painel · Voltar ao passeio para continuar · Esc para sair';

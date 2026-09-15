@@ -260,6 +260,14 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     const automatic=!!tour?.state.active;
     if(!automatic)tourOwner=null;
     else if(tourOwner!==tour){tourBody.x=head.x;tourBody.y=head.y;tourBody.z=head.z;tourOwner=tour;calibrateSeatedTour();}
+    if(automatic&&(curtain.visible||(tour.validHead&&!tour.validHead(lastSafeHead,head)))){
+      // Recover before rendering, rather than trapping the tour behind a black curtain.
+      if(!tour.validHead?.(tourBody,tourBody))tour.recover?.(tourBody);
+      rig.position.x+=tourBody.x-head.x;rig.position.y+=tourBody.y-head.y;rig.position.z+=tourBody.z-head.z;
+      rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);camera.getWorldPosition(head);
+      camera.getWorldPosition(seatedEye);rig.worldToLocal(seatedEye);
+      lastSafeHead={x:head.x,y:head.y,z:head.z};floorLevel=tourBody.y-physics.eyeHeight;curtain.visible=false;
+    }
     if(panel?.visible||tour?.state.active)forward=right=turn=0;
     rig.updateMatrixWorld(true);
     const trackedHands=handVisuals.filter(item=>item.visual.update()).map(item=>item.hand);
@@ -291,7 +299,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       }
       if(automatic){camera.getWorldPosition(turnAfter);lastSafeHead={x:turnAfter.x,y:turnAfter.y,z:turnAfter.z};}
       else lastSafeHead={x:body.x,y:body.y,z:body.z};
-      physics.update(delta,automatic?null:lastSafeHead);
+      physics.update(delta,automatic?tourBody:lastSafeHead);
     }
     rig.updateMatrixWorld(true);
     const visibleHands=trackedHands.length>0;

@@ -15,7 +15,8 @@ function createWalkPhysics({ boxes = [], floors = [], doors = [], radius = 0.20,
   }
   function doorBox(door, angle = door.angle) {
     const c = Math.cos(angle), s = Math.sin(angle);
-    const ux = door.axis === 'x' ? c : -s, uz = door.axis === 'x' ? -s : -c;
+    const sign=door.hingeDirection??1;
+    const ux = sign*(door.axis === 'x' ? c : -s), uz = sign*(door.axis === 'x' ? -s : -c);
     return { ux, uz, cx: door.hingeX + ux * door.width / 2, cz: door.hingeZ + uz * door.width / 2 };
   }
   function hitsDoor(x, z, door, angle = door.angle, padding = radius) {
@@ -131,7 +132,7 @@ function createWalkPhysics({ boxes = [], floors = [], doors = [], radius = 0.20,
       let obstructed = false;
       for (let i = 1; i <= samples; i++) {
         const angle = door.angle + (next - door.angle) * i / samples;
-        if (position && hitsDoor(position.x, position.z, door, angle, radius + 0.002)) { obstructed = true; break; }
+        if (position && position.y > (door.bottom??0)-.2 && position.y < (door.top??2.3)+.2 && hitsDoor(position.x, position.z, door, angle, radius + 0.002)) { obstructed = true; break; }
       }
       if (obstructed) continue;
       door.angle = next;
@@ -149,8 +150,59 @@ function attachWalkDoorPart(leaf, part) {
   return part;
 }
 
+// Test local circulation after furnishing. Prefer the original hinge, but use
+// the other jamb when the open leaf seals the approach to a narrow corridor.
+function fitHouseDoorSwings(physics,doorMeshes){
+  for(const {door,mesh} of doorMeshes){
+    if(mesh.userData.fittedDoor){Object.assign(door,mesh.userData.fittedDoor);continue;}
+    const original={hingeX:door.hingeX,hingeZ:door.hingeZ,openAngle:door.openAngle};
+    const mid=physics.doorBox(door,0),extent=door.width+1.0,step=.10;
+    const minX=mid.cx-extent,minZ=mid.cz-extent,size=Math.ceil(extent*2/step)+1;
+    const relevant=physics.boxes.filter(b=>b.maxX>minX-.2&&b.minX<minX+extent*2+.2&&b.maxZ>minZ-.2&&b.minZ<minZ+extent*2+.2);
+    const local=createWalkPhysics({boxes:relevant,floors:physics.floors,doors:physics.doors});
+    const normal=door.axis==='x'?{x:0,z:1}:{x:1,z:0};
+    let best=null;
+    for(const flip of [false,true])for(const reverse of [false,true]){
+      door.hingeDirection=flip?-1:1;
+      door.hingeX=original.hingeX+(flip&&door.axis==='x'?door.width:0);
+      door.hingeZ=original.hingeZ-(flip&&door.axis==='z'?door.width:0);
+      door.openAngle=original.openAngle*(flip?-1:1)*(reverse?-1:1);
+      const free=new Uint8Array(size*size),queue=new Int32Array(size*size);let start=-1,end=-1,ds=Infinity,de=Infinity;
+      for(let id=0;id<free.length;id++){
+        const x=minX+(id%size)*step,z=minZ+Math.floor(id/size)*step;
+        if(local.blockedForTour(x,z,false,1.85))continue;free[id]=1;
+        const side=(x-mid.cx)*normal.x+(z-mid.cz)*normal.z;
+        if(side>.45){const d=(x-mid.cx-normal.x*.7)**2+(z-mid.cz-normal.z*.7)**2;if(d<ds){ds=d;start=id;}}
+        if(side<-.45){const d=(x-mid.cx+normal.x*.7)**2+(z-mid.cz+normal.z*.7)**2;if(d<de){de=d;end=id;}}
+      }
+      let connected=false;
+      if(start>=0&&end>=0&&ds<.5&&de<.5){let head=0,tail=1;queue[0]=start;free[start]=2;
+        while(head<tail){const id=queue[head++];if(id===end)connected=true;const x=id%size,z=Math.floor(id/size);
+          for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){if(x+dx<0||x+dx>=size||z+dz<0||z+dz>=size)continue;const next=id+dx+dz*size;if(free[next]!==1)continue;
+            if(local.blockedForTour(minX+(x+dx*.5)*step,minZ+(z+dz*.5)*step,false,1.85))continue;free[next]=2;queue[tail++]=next;}
+        }
+      }
+      // Penalize an open leaf visibly intersecting furniture or masonry.
+      const frame=physics.doorBox(door,door.openAngle);let intersections=0;
+      for(let t=.12;t<=door.width;t+=.08){const x=door.hingeX+frame.ux*t,z=door.hingeZ+frame.uz*t;
+        if(relevant.some(b=>(!b.enabled||b.enabled())&&b.top>.6&&b.bottom<2.3&&x>b.minX+.008&&x<b.maxX-.008&&z>b.minZ+.008&&z<b.maxZ-.008))intersections++;
+      }
+      const available=free.reduce((n,v)=>n+Number(v===2),0);
+      const score=(connected?100000:0)-intersections*10000+available-(flip?.01:0)-(reverse?.02:0);
+      if(!best||score>best.score)best={score,flip,reverse,hingeX:door.hingeX,hingeZ:door.hingeZ,openAngle:door.openAngle};
+    }
+    door.hingeX=best.hingeX;door.hingeZ=best.hingeZ;door.openAngle=best.openAngle;door.hingeDirection=best.flip?-1:1;
+    if(best.flip){const dx=door.hingeX-original.hingeX,dz=door.hingeZ-original.hingeZ;
+      mesh.geometry.translate(-dx,0,-dz);for(const child of mesh.children){child.position.x-=dx;child.position.z-=dz;}mesh.position.x+=dx;mesh.position.z+=dz;
+      // Keep rebuilds on the same geometry idempotent.
+      mesh.userData.hingeFlipped=true;
+    }
+    mesh.userData.fittedDoor={hingeX:door.hingeX,hingeZ:door.hingeZ,openAngle:door.openAngle,hingeDirection:door.hingeDirection};
+  }
+}
+
 function createHousePhysics(house, { Box3, onChange, boundaryVisible = () => true, furnitureVisible = () => true }) {
-  const boxes = [], floors = [], doors = [], flightBoxes=[], plan = house.userData.plan;
+  const boxes = [], floors = [], doors = [], flightBoxes=[],doorMeshes=[], plan = house.userData.plan;
   house.updateMatrixWorld(true);
   for (const [, x, z, w, d] of plan.rooms) floors.push({minX:x-plan.w/2,maxX:x+w-plan.w/2,minZ:plan.d/2-z-d,maxZ:plan.d/2-z,top:0.4025});
   house.traverse(mesh => {
@@ -176,7 +228,11 @@ function createHousePhysics(house, { Box3, onChange, boundaryVisible = () => tru
         apply(angle) { mesh.rotation.y = angle; if (mesh.walkProxy) mesh.walkProxy.rotation.y = angle; }};
       mesh.rotation.y = 0;
       doors.push(door);
-      if (info.outer && info.axis === 'x') floors.push({minX:mesh.position.x,maxX:mesh.position.x+width,minZ:mesh.position.z-0.1,maxZ:mesh.position.z+0.28,top:0.4025});
+      doorMeshes.push({door,mesh});
+      if (info.outer && info.axis === 'x') {
+        const otherJamb=mesh.position.x+(mesh.userData.fittedDoor?.hingeDirection??1)*width;
+        floors.push({minX:Math.min(mesh.position.x,otherJamb),maxX:Math.max(mesh.position.x,otherJamb),minZ:mesh.position.z-0.1,maxZ:mesh.position.z+0.28,top:0.4025});
+      }
       return;
     }
     let group = mesh;
@@ -200,9 +256,11 @@ function createHousePhysics(house, { Box3, onChange, boundaryVisible = () => tru
     }
   });
   const physics = createWalkPhysics({boxes, floors, doors, onChange});
+  fitHouseDoorSwings(physics,doorMeshes);
   physics.flightBoxes=flightBoxes;
   const entry = doors.find(d => d.outer && d.names.some(name => /^Sala/.test(name)));
-  physics.spawn = entry ? {x:entry.hingeX + entry.width / 2, z:entry.hingeZ + 2.4} : {x:0,z:plan.d/2+2.4};
+  const entryCenter=entry?physics.doorBox(entry,0):null;
+  physics.spawn = entry ? {x:entryCenter.cx, z:entryCenter.cz + 2.4} : {x:0,z:plan.d/2+2.4};
   physics.site=house.userData.site;
   physics.roofTop=new Box3().setFromObject(house).max.y;
   // Aerial tour segments stay above every roof and pergola.

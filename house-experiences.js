@@ -24,3 +24,5 @@ document.addEventListener('keydown',event=>{
   if(event.code==='KeyP'){event.preventDefault();tourAction(houseTour.state.paused?'resume':'pause');}
   if(event.code==='Period')tourAction('next');if(event.code==='Comma')tourAction('previous');
 });
+
+et('tour-expand').onclick=()=>{const open=et('tour-hud').classList.toggle('expanded');et('tour-expand').setAttribute('aria-expanded',String(open));et('tour-expand').textContent=open?'Recolher':'Opções';};

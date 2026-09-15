@@ -146,3 +146,31 @@ visual até voltar; encostar nos móveis não escurece a cena. O corpo virtual m
 colisões com móveis, paredes e portas. Trocas grandes de planta podem pausar brevemente.
 
 Os backups e perfis de navegador são locais e nunca entram na publicação.
+
+## Tour contínuo (1.7)
+
+O botão **Tour automático** funciona na página e no painel VR. Durante o percurso,
+o controle pequeno no canto permite pausar/continuar e abrir **Opções**. No painel
+completo ficam Próximo, Anterior e Encerrar. No computador, P pausa e Esc encerra.
+O menu completo pode ser recolhido novamente.
+
+Edite `tour-config.js`: `stops` determina a ordem; `room` resolve os nomes da planta;
+`u/v` e `focusU/focusV` permitem ajustar posição e enquadramento dentro do ambiente.
+`models` permite ajustes específicos por planta. `dwell:0` mantém o movimento
+contínuo; valores positivos criam uma pausa opcional. Velocidades atuais: 1,15 m/s
+nos interiores e 1,9 m/s no exterior, com aceleração e desaceleração.
+
+A rota é preparada em Worker com grade de passagem, paredes, móveis, pisos e
+portas da própria casa. Curvas são verificadas antes de serem aceitas. A câmera
+mantém margem dos sólidos; nos banheiros compactos pode passar acima de louças
+baixas, sem atravessá-las. As portas abrem na aproximação e fecham depois de a
+câmera liberar a área de giro. O tour não modifica pitch ou roll do headset.
+
+A posição é verificada durante o movimento. Uma posição inválida volta ao último
+ponto seguro e solicita nova rota. Durante o tour, um deslocamento físico inválido
+do headset recentra a base antes de renderizar, evitando ficar preso na tela preta.
+A proteção visual do passeio manual continua disponível fora do tour.
+
+Para atualizar: editar, executar `npm run build`, `npm test` e os testes de navegador;
+validar as imagens antes de enviar para `main`. O GitHub Actions publica no mesmo
+endereço HTTPS, sem servidor local para o cliente.

@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 function fixture(){
  const workers=[],timers=new Map();let timerId=0;
  class Worker{constructor(){workers.push(this);}postMessage(message){this.message=message;if(this.failPost)throw Error('Falha de envio');}terminate(){this.terminated=true;}}
- const ctx=vm.createContext({Worker,Blob:class{},URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},createWalkPhysics(){},buildHouseTour(){},
+ const ctx=vm.createContext({Worker,Blob:class{},URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},createWalkPhysics(){},createTourCollision(){},buildHouseTour(){},
   setTimeout(fn){timers.set(++timerId,fn);return timerId;},clearTimeout(id){timers.delete(id);}});
  const create=vm.runInContext(fs.readFileSync(path.join(__dirname,'../tour-worker.js'),'utf8')+';createTourPlanner',ctx),planner=create();
  const data={physics:{boxes:[],floors:[],doors:[],spawn:{x:0,z:0}},plan:{w:4,d:4,rooms:[]},position:{x:0,y:1.65,z:0},model:'50',config:{},startIndex:2};

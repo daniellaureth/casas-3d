@@ -59,8 +59,8 @@ const {createServer}=require('../scripts/serve.cjs'),delay=ms=>new Promise(r=>se
         const hud=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-tour-'+(quest?'quest':'desktop')+'.png'),Buffer.from(hud.data,'base64'));
         const aerialIndex=(await evaluate('casaDebug().automaticTour.total'))-4;
         for(let i=index;i<aerialIndex;i++){await click('tour-next');await waitFor('casaDebug().automaticTour.phase!=="planning"');}
-        await waitFor('casaDebug().automaticTour.phase==="dwell"');
-        const aerial=await evaluate('casaDebug()');assert.ok(aerial.camera[1]>3.5);assert.ok(aerial.cameraRotation[0]>=-.31&&aerial.cameraRotation[0]<0,'desktop exterior view needs only a gentle downward angle');
+        await waitFor('casaDebug().camera[1]>4 && casaDebug().automaticTour.active');await click('tour-pause');
+        const aerial=await evaluate('casaDebug()');assert.ok(aerial.camera[1]>3.5);assert.ok(aerial.cameraRotation[0]>=-.86&&aerial.cameraRotation[0]<0,'desktop exterior view needs only a gentle downward angle');
         const aerialShot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'standalone-aerial-'+(quest?'quest':'desktop')+'.png'),Buffer.from(aerialShot.data,'base64'));
         await click('tour-stop');assert.equal(await evaluate('casaDebug().automaticTour.active'),false);assert.equal(await evaluate('casaDebug().walking'),true,'normal first-person controls restored');
         assert.ok((await evaluate('casaDebug().camera'))[1]<2.2,'aerial cancellation restores ground height');

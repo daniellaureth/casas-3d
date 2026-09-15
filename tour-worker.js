@@ -1,7 +1,7 @@
 // A browser Worker keeps path planning off the XR/render thread. No server or dependency.
 function createTourPlanner(){
   if(typeof Worker==='undefined')return null;
-  const source=createWalkPhysics.toString()+'\n'+buildHouseTour.toString()+`\nlet navigation;
+  const source=createWalkPhysics.toString()+'\n'+createTourCollision.toString()+'\n'+buildHouseTour.toString()+`\nlet navigation;
     onmessage=event=>{const {id,type,data}=event.data;try{
       let result;if(type==='build'){
         const physics=createWalkPhysics(data.physics);physics.spawn=data.spawn;physics.site=data.site;physics.tourAltitude=data.tourAltitude;physics.roofTop=data.roofTop;physics.flightBoxes=data.flightBoxes;

@@ -22,7 +22,7 @@ test('each furnished plan keeps essential furniture and connects all room entran
     const idAt=(x,z)=>Math.round((z-minZ)/step)*nx+Math.round((x-minX)/step);
     function clear(id){if(id<0||id>=cache.length)return false;if(cache[id])return cache[id]===1;const {x,z}=point(id);const ok=p.floorAt(x,z)>0.35&&!p.blocked(x,z);cache[id]=ok?1:-1;return ok;}
     const entry=p.doors.find(d=>d.outer&&d.names.some(n=>/^Sala/.test(n)));
-    const start=idAt(entry.hingeX+entry.width/2,entry.hingeZ-0.4);
+    const center=p.doorBox(entry,0),start=idAt(center.cx,center.cz-0.4);
     assert.ok(clear(start),model+' entry approach free');
     const queue=[start];visited[start]=1;
     for(let q=0;q<queue.length;q++){
@@ -34,8 +34,7 @@ test('each furnished plan keeps essential furniture and connects all room entran
       assert.ok(count>=6,model+' reachable '+name+' ('+count+' grid points)');
     }
     for(const door of p.doors.filter(d=>!d.outer)) {
-      const cx=door.axis==='x'?door.hingeX+door.width/2:door.hingeX;
-      const cz=door.axis==='z'?door.hingeZ-door.width/2:door.hingeZ;
+      const {cx,cz}=p.doorBox(door,0);
       for(const side of [-1,1]) {
         const tx=cx+(door.axis==='z'?side*0.4:0),tz=cz+(door.axis==='x'?side*0.4:0);
         const found=queue.some(id=>{const v=point(id);return Math.hypot(v.x-tx,v.z-tz)<0.22;});
@@ -65,4 +64,14 @@ test('walking uses the same lighting path when moving, idle, or editing',()=>{
   assert.deepEqual(renders,['direct','direct','direct','direct','direct']);
   frameContext.walkMode.active=false;frameContext.$i=true;frameContext.renderFrame(frameContext.Io+16);
   assert.equal(renders.at(-1),'postprocessed','overview still gets its finishing effects');
+});
+
+
+test('50 m² includes shower glass and 60 m² keeps the basin and shower in separate areas',()=>{
+ for(const model of ['50','60']){const house=context.api.xx(model,{width:15,depth:30});const items=house.children[8].children.filter(g=>g.userData.room==='Banheiro');
+  const shower=items.find(g=>/^(Box|Chuveiro)/.test(g.name)),sink=items.find(g=>/^Lavatório/.test(g.name));assert.ok(shower&&sink);
+  let glass=0;shower.traverse(m=>{if(m.isMesh&&m.material?.transparent)glass++;});assert.ok(glass>=2,'shower enclosure has both glass panels');
+  const a=shower.userData.layout.body,b=sink.userData.layout.body;
+  assert.ok(a.x+a.w+.05<=b.x||b.x+b.w+.05<=a.x||a.z+a.d+.05<=b.z||b.z+b.d+.05<=a.z,'basin and shower footprints do not overlap');
+ }
 });
