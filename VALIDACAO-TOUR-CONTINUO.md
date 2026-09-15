@@ -68,3 +68,21 @@ Resultado final local: 73 testes aprovados, sem falhas. Verificação adicional 
 limiar após troca de dobradiça: aprovada; testes de câmera/física: 15 aprovados.
 Registros finais de VR: 34 imagens em 50 m², 38 em 60 m², 48 em 62 m² e 54 em 69 m².
 Nenhuma recuperação forçada foi necessária nesses quatro percursos completos.
+
+## Suavidade da câmera — versão 1.7.1
+
+Backup anterior: `backups/antes-suavidade-tour-1.7.0.bundle`.
+
+- Enquadramento estável por ambiente, separado da direção instantânea do deslocamento. Os pontos automáticos ficam do lado de chegada do cômodo, evitando entrar até o canto oposto para depois girar de volta.
+- Curvas locais validadas também junto às portas. Quando não há espaço para arredondar, um perfil de velocidade calculado antes do movimento desacelera a câmera para atravessar a curva sem um tranco lateral. Mantém as validações de paredes, móveis e portas.
+- Rotação com alvo filtrado, limite de 24 graus/s e aceleração angular de 18 graus/s². Não zera a velocidade angular ao cruzar o alvo nem perde um frame de movimento na troca de ambiente.
+- Antecipação do percurso com interpolação por distância, incluindo a próxima etapa; não salta o enquadramento entre vértices da navegação.
+- Não acrescenta luzes, materiais, efeitos ou dependências. A preparação continua no Worker. Pitch e roll do headset continuam controlados exclusivamente pela cabeça do usuário.
+
+A simulação completa em passos de 1/60 s reduziu o giro acumulado nas quatro plantas em relação à 1.7.0 (50: 1734° → 855°; 60: 1702° → 1042°; 62: 2268° → 1115°; 69: 2263° → 1191°). Essa métrica verifica giros desnecessários; não é uma medição de conforto ou FPS no Quest físico. O teste de percurso agora verifica também limites de velocidade/aceleração angular, trocas de ambiente e ausência de quinas rápidas durante o deslocamento.
+
+Ajustes futuros em `tour-config.js`: `cornerRadius`, `lateralAcceleration`, `lookAhead`, `turnSpeed`, `turnAcceleration`, `aimSmoothing` e `turnResponse`. Aumentar a suavidade não deve substituir a validação de enquadramento: o cômodo precisa estar visível durante sua apresentação.
+
+Verificação visual da 1.7.1: tours completos com o WebXRManager real e poses simuladas nas quatro plantas; zero recuperação de posição e zero cortina preta. Contadores permaneceram em 3 luzes e 13 texturas, com pico de 174 draw calls estéreo em 50/60 m² e 206 em 62/69 m², iguais à revisão anterior. O pacote de produção passou nos comandos de iniciar/pausar/continuar e na retomada após falha simulada do Worker. A sessão VR também passou em avançar/voltar, encerrar e reentrar.
+
+A comparação quantitativa de movimento acima usa lote de 15 × 30 m. A revisão visual usa os lotes padrão de cada planta, por isso as durações não são diretamente comparáveis. FPS, latência e conforto no Quest físico continuam dependendo de validação no aparelho.

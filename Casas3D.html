@@ -5527,7 +5527,8 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
 // Room u/v override the camera position; focusU/focusV set the subject (0..1).
 // Exterior angles orbit the actual lot: 0=front, 90=right, 180=back.
 const CASA_TOUR_CONFIG={speed:1.15,exteriorSpeed:1.9,acceleration:.9,dwell:0,grid:.10,cameraMargin:.14,
-  eyeHeight:1.85,turnSpeed:45,turnAcceleration:45,cornerRadius:.5,exteriorHeight:4.4,
+  eyeHeight:1.85,turnSpeed:24,turnAcceleration:18,turnResponse:1.35,aimSmoothing:.8,
+  lookAhead:2.2,lateralAcceleration:.65,cornerRadius:.9,exteriorHeight:4.4,
   start:'entry',models:{},stops:[
     {id:'entry',label:'Entrada',kind:'entry',dwell:0},
     {id:'living',label:'Sala de estar',room:'^Sala',focusV:.3},
@@ -5717,10 +5718,10 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
   // door; these short curves are accepted only after checking every chord.
   function smooth(raw,ground=false){
     if(!raw||raw.length<3)return raw;
-    const result=[raw[0]],safe=ground?(a,b)=>clear(a,b)&&flightClear(a,b):flightClear;
+    raw=raw.filter((p,i)=>!i||distance(p,raw[i-1])>1e-5);
+    const result=[raw[0]],safe=ground?(a,b)=>clear(a,b)&&flightClear(a,b)&&!physics.doors.some(d=>collision.doorHits(a,b,d,0)&&collision.doorHits(a,b,d,d.openAngle)):flightClear;
     for(let i=1;i<raw.length-1;i++){
       const a=raw[i-1],b=raw[i],c=raw[i+1];
-      if(ground&&physics.doors.some(d=>Math.hypot(b.x-d.hingeX,b.z-d.hingeZ)<d.width+1)){result.push(b);continue;}
       let radius=Math.min(config.cornerRadius??.55,distance(a,b)*.4,distance(b,c)*.4),curve=null;
       while(radius>.015){
         const ab=radius/distance(a,b),bc=radius/distance(b,c);
@@ -5750,10 +5751,10 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
   }
   function rawRoute(from,to){
     if(!aerial(from)&&!aerial(to)){
-      const first=groundRoute(from,to.approach||to);if(!first)return null;
-      const reveal=to.approach?groundRoute(to.approach,to):null;if(to.approach&&!reveal)return null;
-      const result=smooth(reveal?[...first,...reveal.slice(1)]:first,true);
-      if(to.bounds)for(const p of result)if(p.x>to.bounds.minX+.15&&p.x<to.bounds.maxX-.15&&p.z>to.bounds.minZ+.15&&p.z<to.bounds.maxZ-.15)p.view=to.focus;
+      // Reach the room's safe viewpoint without an artificial sideways detour
+      // to an approach point followed by an immediate reversal.
+      const first=groundRoute(from,to);if(!first)return null;
+      const result=smooth(first,true);
       return result;
     }
     if(from.kind==='aerial'&&to.kind==='aerial'){
@@ -5797,13 +5798,17 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
       if(Number.isFinite(spec.u)||Number.isFinite(spec.v))target={x:x+w*(spec.u??.5)-plan.w/2,z:plan.d/2-z-d*(spec.v??.5)};
       else{
         const zone={...bounds};if(/Sala.*cozinha/i.test(label)){if(spec.id==='kitchen')zone.maxZ-=d*.5;else zone.minZ+=d*.5;}
-        const insetX=Math.min(.5,(zone.maxX-zone.minX)*.3),insetZ=Math.min(.5,(zone.maxZ-zone.minZ)*.3);
-        let score=-Infinity;
-        for(const x of [zone.minX+insetX,zone.maxX-insetX])for(const z of [zone.minZ+insetZ,zone.maxZ-insetZ]){
-          const id=nearest({x,z},zone);if(id<0)continue;const p=coords(id);
-          let approach=4;for(const door of physics.doors)if(door.names?.includes(label))approach=Math.min(approach,Math.hypot(p.x-door.hingeX,p.z-door.hingeZ));
-          const value=Math.hypot(p.x-focus.x,p.z-focus.z)-approach*.12;
-          if(value>score){score=value;target=p;}
+        // Present from the arrival side of the room. Choosing the far corner
+        // and then looking back made the old camera turn around in every room.
+        const previous=points[points.length-1]||physics.spawn;
+        let score=Infinity;
+        for(let cell=0;cell<count;cell++){
+          if(!free[cell]||!reachable[cell])continue;const p=coords(cell);
+          if(p.x<zone.minX+.4||p.x>zone.maxX-.4||p.z<zone.minZ+.4||p.z>zone.maxZ-.4)continue;
+          if(physics.doors.some(d=>physics.hitsDoor(p.x,p.z,d,d.openAngle,.27)))continue;
+          const framing=Math.hypot(p.x-focus.x,p.z-focus.z);
+          const value=Math.hypot(p.x-previous.x,p.z-previous.z)+Math.max(0,.85-framing)*3;
+          if(value<score){score=value;target=p;}
         }
         target||=focus;
       }
@@ -5814,7 +5819,7 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
     const point=coords(id),y=physics.floorAt(point.x,point.z)+(spec.walkingHeight?physics.eyeHeight:eye);
     focus||={x:physics.spawn.x,y,z:physics.spawn.z-3};
     let endpoint=point,approach=null;
-    if(bounds){let best=.55;
+    if(bounds&&config.roomRevealDetour===true){let best=.55;
       for(let cell=0;cell<count;cell++){if(!free[cell]||!reachable[cell])continue;const p=coords(cell),d=Math.hypot(p.x-point.x,p.z-point.z);
         if(d<.65||d>1.35||p.x<bounds.minX+.35||p.x>bounds.maxX-.35||p.z<bounds.minZ+.35||p.z>bounds.maxZ-.35)continue;
         if(physics.doors.some(door=>physics.hitsDoor(p.x,p.z,door,door.openAngle,.27)))continue;
@@ -5832,9 +5837,10 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
 
 function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,onChange=()=>{},plannerFactory=()=>null}) {
   const state={active:false,paused:false,label:'',phase:'idle',index:0,total:0,revision:0,fade:0,message:'',focus:null,heading:null,kind:'room',failure:null,recoveries:0,doorWait:false};
-  let navigation=null,physics=null,path=null,cursor=1,speed=0,hold=0,turnSpeed=0,remaining=[];
+  let navigation=null,physics=null,path=null,cursor=1,speed=0,hold=0,turnSpeed=0,remaining=[],speedLimits=[];
   let planner=null,generation=0,requestId=0,lastPosition=null,restartIndex=null;
   let collision=null,repairs=0;const lastSafe={x:0,y:0,z:0},candidate={x:0,y:0,z:0},probe={x:0,y:0,z:0};
+  const lookAhead={x:0,y:0,z:0};let filteredHeading=0;
   function remember(p){lastSafe.x=p.x;lastSafe.y=p.y;lastSafe.z=p.z;}
   function recover(position){
     position.x=lastSafe.x;position.y=lastSafe.y;position.z=lastSafe.z;state.recoveries++;speed=0;
@@ -5862,11 +5868,43 @@ function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,on
   function preparationFailed(error){state.failure='preparation';state.phase='error';state.paused=true;speed=0;state.message=(error?.message||'Não foi possível preparar o tour.')+' Toque em Continuar para tentar novamente.';changed();}
   function aimHeading(position,aim){return Math.hypot(aim.x-position.x,aim.z-position.z)>.15?Math.atan2(position.x-aim.x,position.z-aim.z):navigation.points[state.index].heading;}
   function turn(heading,dt){
-    const angle=difference(heading,state.heading),target=Math.sign(angle)*Math.min(turnRate,Math.sqrt(2*turnAcceleration*Math.abs(angle)));
+    // A damped gimbal: remove target chatter before rotating the rig, then ease
+    // angular speed to zero instead of snapping it to zero on target crossing.
+    filteredHeading+=difference(heading,filteredHeading)*(1-Math.exp(-dt/(config.aimSmoothing??.8)));
+    const angle=difference(filteredHeading,state.heading),target=Math.max(-turnRate,Math.min(turnRate,angle*(config.turnResponse??1.35)));
     turnSpeed+=Math.max(-turnAcceleration*dt,Math.min(turnAcceleration*dt,target-turnSpeed));
-    const step=turnSpeed*dt;
-    if(Math.sign(step)===Math.sign(angle)&&Math.abs(step)>=Math.abs(angle)){state.heading+=angle;turnSpeed=0;return true;}
-    state.heading+=step;return Math.abs(angle)<.0001&&Math.abs(turnSpeed)<.001;
+    state.heading+=turnSpeed*dt;return Math.abs(difference(heading,state.heading))<.0001&&Math.abs(turnSpeed)<.001;
+  }
+  function prepareSpeedLimits(destination){
+    // Backward braking profile, computed once per leg. Sharp bends that cannot
+    // be rounded safely are crossed slowly; wide curves retain cruising speed.
+    speedLimits=new Float64Array(path.length);speedLimits.fill(config.exteriorSpeed??config.speed);
+    const lateral=config.lateralAcceleration??.65;
+    for(let i=1;i<path.length;i++){
+      const a=path[i-1],b=path[i],c=path[i+1]||(destination.dwell===0?navigation.legs[state.index]?.find(p=>Math.hypot(p.x-b.x,p.y-b.y,p.z-b.z)>.02):null);
+      if(!c)continue;
+      const ax=b.x-a.x,ay=b.y-a.y,az=b.z-a.z,bx=c.x-b.x,by=c.y-b.y,bz=c.z-b.z,ab=Math.hypot(ax,ay,az),bc=Math.hypot(bx,by,bz);
+      if(ab<1e-6||bc<1e-6)continue;
+      const angle=Math.acos(Math.max(-1,Math.min(1,(ax*bx+ay*by+az*bz)/(ab*bc))));
+      if(angle>.001){const radius=Math.min(ab,bc)*.5/Math.max(.001,Math.sin(angle*.5));speedLimits[i]=Math.min(speedLimits[i],Math.sqrt(lateral*radius),angle>Math.PI*.75?.12:angle>.22?.28:Infinity);}
+    }
+    if(destination.dwell>0||state.index===state.total-1)speedLimits[path.length-1]=0;
+    for(let i=path.length-2;i>=0;i--)speedLimits[i]=Math.min(speedLimits[i],Math.sqrt(speedLimits[i+1]**2+2*config.acceleration*(remaining[i]-remaining[i+1])));
+  }
+  function sampleAhead(position,metres){
+    let a=position;
+    for(let i=cursor;i<path.length;i++){
+      const b=path[i],length=Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z);
+      if(length>=metres){const t=metres/(length||1);lookAhead.x=a.x+(b.x-a.x)*t;lookAhead.y=a.y+(b.y-a.y)*t;lookAhead.z=a.z+(b.z-a.z)*t;return lookAhead;}
+      metres-=length;a=b;
+    }
+    const next=navigation.points[state.index].dwell===0?navigation.legs[state.index]:null;
+    if(next)for(let i=1;i<next.length;i++){
+      const b=next[i],length=Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z);
+      if(length>=metres){const t=metres/(length||1);lookAhead.x=a.x+(b.x-a.x)*t;lookAhead.y=a.y+(b.y-a.y)*t;lookAhead.z=a.z+(b.z-a.z)*t;return lookAhead;}
+      metres-=length;a=b;
+    }
+    lookAhead.x=a.x;lookAhead.y=a.y;lookAhead.z=a.z;return lookAhead;
   }
   function restoreWalking(){
     if(!lastPosition||!physics?.blocked)return;const p=getPhysics(),x=lastPosition.x,z=lastPosition.z;let safe=!p.blocked(x,z)?{x,z}:null;
@@ -5881,12 +5919,13 @@ function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,on
     if(path&&!path.every((p,i)=>!i||collision.clear(path[i-1],p,{doors:'ignore',padding:.06})))path=null;
     if(path){
       remaining=new Float64Array(path.length);for(let i=path.length-2;i>=0;i--)remaining[i]=remaining[i+1]+Math.hypot(path[i+1].x-path[i].x,path[i+1].y-path[i].y,path[i+1].z-path[i].z);
+      prepareSpeedLimits(destination);
       state.phase='moving';
     }else{state.phase='unavailable';state.failure='route';state.paused=true;state.message='Não há passagem livre até '+destination.label+'. Continuar recalcula o trajeto; você também pode encerrar.';}
     changed();
   }
   function start(position,heading=0,startIndex=null,repair=false){generation++;requestId++;planner?.dispose();planner=null;physics=getPhysics();collision=createTourCollision(physics,config.cameraMargin??.14);lastPosition=position;if(!repair){repairs=0;state.recoveries=0;remember(position);}for(const door of physics.doors||[])door.target=0;const token=generation;navigation=null;restartIndex=startIndex;state.total=0;state.index=startIndex??0;state.focus=null;state.heading=heading;state.failure=null;turnSpeed=0;
-    state.active=true;state.paused=false;state.fade=0;state.phase='planning';state.label='Preparando tour…';state.message='O percurso está sendo calculado.';changed();
+    filteredHeading=heading;state.active=true;state.paused=false;state.fade=0;state.phase='planning';state.label='Preparando tour…';state.message='O percurso está sendo calculado.';changed();
     try{planner=plannerFactory();if(planner){
       const origin={x:position.x,y:position.y,z:position.z};planner.build({physics,plan:getPlan(),model:getModel(),position:origin,config,startIndex}).then(result=>{
         if(!state.active||generation!==token)return;navigation=result;state.total=result.points.length;setRoute(result.index,origin,result.path);
@@ -5925,22 +5964,22 @@ function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,on
     while(aim&&Math.hypot(aim.x-position.x,aim.y-position.y,aim.z-position.z)<.000001){cursor++;aim=path[cursor];}
     if(!aim){
       if(destination.dwell>0){speed=0;state.phase='settle';changed();}
-      else setRoute(state.index+1,position,navigation.legs[state.index],true);
+      else {setRoute(state.index+1,position,navigation.legs[state.index],true);if(state.active)return update(position,delta);}
       return true;
     }
     const dx=aim.x-position.x,dy=aim.y-position.y,dz=aim.z-position.z,distance=Math.hypot(dx,dy,dz);
     const left=distance+remaining[cursor];
-    // Look a little ahead along the prepared curve, then frame the room itself
-    // during the final approach. Head tracking remains independent of this yaw.
-    let look=aim,lookDistance=distance,j=cursor;
-    while(j<path.length-1&&lookDistance<1.1){lookDistance+=remaining[j]-remaining[j+1];look=path[++j];}
-    let heading=aim.view?aimHeading(position,aim.view):aimHeading(position,look);
-    const framing=Math.max(0,Math.min(1,1-left/2));if(!aim.view)heading+=difference(destination.heading,heading)*framing;
-    const error=Math.abs(difference(heading,state.heading));turn(heading,dt);
+    // Interpolate the look-ahead by travelled distance, not discrete vertices.
+    // Never turn toward a point that just passed behind the camera. Each room
+    // keeps one framing throughout the shot instead of alternating between the
+    // direction of travel and the room centre when crossing its boundary.
+    const look=sampleAhead(position,config.lookAhead??2.2);
+    const heading=destination.bounds?destination.heading:aim.view?aimHeading(position,aim.view):Math.hypot(look.x-position.x,look.z-position.z)>.45?aimHeading(position,look):filteredHeading;
+    turn(heading,dt);
     const plan=getPlan(),exterior=position.y>physics.floorAt(position.x,position.z)+2.3||(destination.kind==='aerial'&&(Math.abs(position.x)>plan.w/2+.5||Math.abs(position.z)>plan.d/2+.5));
     const cruise=exterior?(config.exteriorSpeed??config.speed):config.speed;
     const braking=destination.dwell>0||state.index===state.total-1?Math.sqrt(2*config.acceleration*left):cruise;
-    const cornerSpeed=Math.max(.7,cruise*(1-error/Math.PI*.5));
+    const cornerSpeed=Math.sqrt(speedLimits[cursor]**2+2*config.acceleration*distance);
     const target=Math.min(cruise,braking,cornerSpeed);speed+=Math.max(-config.acceleration*dt,Math.min(config.acceleration*dt,target-speed));
     // Camera flight, not a walking body. Architectural clearance is precomputed.
     let travel=speed*dt;

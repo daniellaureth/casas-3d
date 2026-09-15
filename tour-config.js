@@ -3,7 +3,8 @@
 // Room u/v override the camera position; focusU/focusV set the subject (0..1).
 // Exterior angles orbit the actual lot: 0=front, 90=right, 180=back.
 const CASA_TOUR_CONFIG={speed:1.15,exteriorSpeed:1.9,acceleration:.9,dwell:0,grid:.10,cameraMargin:.14,
-  eyeHeight:1.85,turnSpeed:45,turnAcceleration:45,cornerRadius:.5,exteriorHeight:4.4,
+  eyeHeight:1.85,turnSpeed:24,turnAcceleration:18,turnResponse:1.35,aimSmoothing:.8,
+  lookAhead:2.2,lateralAcceleration:.65,cornerRadius:.9,exteriorHeight:4.4,
   start:'entry',models:{},stops:[
     {id:'entry',label:'Entrada',kind:'entry',dwell:0},
     {id:'living',label:'Sala de estar',room:'^Sala',focusV:.3},

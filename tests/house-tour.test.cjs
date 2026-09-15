@@ -168,16 +168,29 @@ test('continuous tour closes doors, visits every room once and never stops to pr
   const f=fixture(model),tour=T.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=>model});
   const collision=T.createTourCollision(f.physics);tour.start(f.position);let steps=0,opened=0,closed=0,still=0,maxStill=0;
   const visited=new Set(),angles=f.physics.doors.map(()=>0),initialCounts=[f.physics.boxes.length,f.physics.doors.length];
+  let previousYaw=tour.state.heading,previousYawVelocity=0,previousVelocity=null,rotation=0,turnSign=0,reversals=0;
   while(tour.state.active&&steps++<5000){const before={...f.position};tour.update(f.position,.05);f.physics.update(.05,f.position);
    assert.equal(tour.state.paused,false,model+' '+JSON.stringify(tour.state));assert.notEqual(tour.state.phase,'dwell');assert.notEqual(tour.state.phase,'settle');
    assert.ok(collision.clear(before,f.position,{doors:'live',padding:.06}),model+' live camera segment stays clear');
    assert.equal(tour.state.fade,0);visited.add(tour.state.index);
+   if(tour.state.active){
+    const yawVelocity=Math.atan2(Math.sin(tour.state.heading-previousYaw),Math.cos(tour.state.heading-previousYaw))/.05;
+    assert.ok(Math.abs(yawVelocity)<=T.config.turnSpeed*Math.PI/180+1e-7,'bounded gimbal speed');
+    assert.ok(Math.abs(yawVelocity-previousYawVelocity)/.05<=T.config.turnAcceleration*Math.PI/180+1e-7,model+' no angular impulse, including room changes');
+    rotation+=Math.abs(yawVelocity)*.05;
+    if(Math.abs(yawVelocity)>.05){if(turnSign&&Math.sign(yawVelocity)!==turnSign)reversals++;turnSign=Math.sign(yawVelocity);}
+    previousYaw=tour.state.heading;previousYawVelocity=yawVelocity;
+    const v={x:(f.position.x-before.x)/.05,y:(f.position.y-before.y)/.05,z:(f.position.z-before.z)/.05};v.speed=Math.hypot(v.x,v.y,v.z);
+    if(previousVelocity&&v.speed>.5&&previousVelocity.speed>.5){const dot=(v.x*previousVelocity.x+v.y*previousVelocity.y+v.z*previousVelocity.z)/(v.speed*previousVelocity.speed);assert.ok(Math.acos(Math.max(-1,Math.min(1,dot)))<Math.PI/4,model+' no fast right-angle bounce');}
+    previousVelocity=v;
+   }
    still=Math.hypot(f.position.x-before.x,f.position.y-before.y,f.position.z-before.z)<1e-7?still+1:0;maxStill=Math.max(maxStill,still);
    f.physics.doors.forEach((d,i)=>{if(!angles[i]&&Math.abs(d.angle)>.01)opened++;if(angles[i]&&Math.abs(d.angle)<.01)closed++;angles[i]=Math.abs(d.angle)>.01;});
   }
   assert.equal(tour.state.active,false,model+' finishes');assert.equal(visited.size,tour.points.length);assert.ok(opened>0&&closed>0);assert.ok(maxStill<25,'door waits stay below 1.25 seconds');
   assert.equal(tour.points.filter(p=>/circula/i.test(p.label)).length,0);assert.equal(new Set(tour.points.map(p=>p.id)).size,tour.points.length);
   assert.deepEqual([f.physics.boxes.length,f.physics.doors.length],initialCounts);assert.ok(f.physics.doors.every(d=>d.target===0));
+  assert.ok(rotation<1500*Math.PI/180,model+' avoids repeated spins while presenting the rooms');assert.ok(reversals<=10,model+' avoids repeatedly reversing the gimbal');
  }
 });
 
