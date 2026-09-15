@@ -36,6 +36,15 @@ test('stereo panel choices work by ray and unavailable garage choices cannot app
   f.select('close');assert.equal(f.panel.visible,false);
   f.panel.dispose();assert.equal(f.camera.children.length,0);assert.equal(f.scene.children.length,1);
 });
+
+test('tour menu stays in front of the seated view while looking down at the lot',()=>{
+ const f=panelFixture(),head=new T.Vector3(8,21,10),forward=new T.Vector3(-8,-20.55,-10).normalize();
+ f.state.tour={active:true};f.panel.open(head,forward);
+ const toPanel=f.panel.root.position.clone().sub(head).normalize();assert.ok(toPanel.dot(forward)>.995,'menu follows the aerial line of sight');
+ const item=f.panel.buttons.find(b=>b.id==='close'),point=f.panel.root.localToWorld(new T.Vector3(((item.x+item.w/2)/1040-.5)*1.04,(.5-(item.y+item.h/2)/820)*.82,0));
+ const ray=new T.Group();ray.position.copy(head);ray.quaternion.setFromUnitVectors(new T.Vector3(0,0,-1),point.sub(head).normalize());ray.updateMatrixWorld(true);
+ assert.equal(f.panel.select(ray),true);assert.equal(f.panel.visible,false,'close still works by controller ray');
+});
 test('every panel control stays within the canvas and hand pinch uses the same ray hit path',()=>{
   const f=panelFixture();
   for(const tab of ['casa','terreno','passeio','visao','tour']){

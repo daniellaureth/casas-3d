@@ -169,10 +169,10 @@ function createWalkCamera({ camera, controls, canvas, stopTour, finishHouse, res
         tour.update(camera.position,delta);
         const focus=tour.state.focus;
         // Match the seated framing on desktop while retaining mouse look offsets.
-        // Only the desktop camera tilts slightly; XR changes the base yaw only.
+        // Both tours frame the lot from above; native XR tracking stays free.
         if(focus&&Number.isFinite(tour.state.heading)&&!tour.state.paused){
           const dx=focus.x-camera.position.x,dy=focus.y-camera.position.y,dz=focus.z-camera.position.z;
-          const wantedPitch=Math.max(tour.state.kind==='aerial'?-.85:-.3,Math.min(.1,Math.atan2(dy,Math.hypot(dx,dz))))+tourPitchOffset,blend=tour.state.fade===1?1:Math.min(1,delta*1.2);
+          const wantedPitch=Math.max(tour.state.kind==='aerial'?-1.25:-.3,Math.min(.1,Math.atan2(dy,Math.hypot(dx,dz))))+tourPitchOffset,blend=tour.state.fade===1?1:Math.min(1,delta*1.2);
           yaw=tour.state.heading+tourLookOffset;pitch=Math.max(-Math.PI/2+.01,Math.min(Math.PI/2-.01,pitch+(wantedPitch-pitch)*blend));look();
         }
         const moved=getPhysics()?.update(delta,camera.position);const result=changed||moved||!tour.state.paused;changed=false;return result;

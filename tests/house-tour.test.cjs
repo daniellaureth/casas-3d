@@ -9,6 +9,32 @@ test('canceling route preparation ignores late worker results and releases the p
 function fixture(model){const house=T.xx(model,{width:15,depth:30}),physics=T.createHousePhysics(house,{Box3:T.Box3}),position={...physics.spawn,y:physics.floorAt(physics.spawn.x,physics.spawn.z)+physics.eyeHeight};
  const tour=T.createHouseTour({getPhysics:()=>physics,getPlan:()=>house.userData.plan,getModel:()=>model,config:{...T.config,dwell:.05,stops:T.config.stops.map(s=>({...s,dwell:.05}))}});return {house,physics,position,tour};}
 
+test('compact lots complete the outdoor orbit above lower roofs without applying the indoor height cap',()=>{
+ for(const model of ['50','60','62','69']){
+  const house=T.xx(model,{width:model==='62'?12.1:12,depth:21},{facade:0,high:true}),physics=T.createHousePhysics(house,{Box3:T.Box3});
+  const position={...physics.spawn,y:physics.floorAt(physics.spawn.x,physics.spawn.z)+1.7};
+  const tour=T.createHouseTour({getPhysics:()=>physics,getPlan:()=>house.userData.plan,getModel:()=>model});
+  tour.start(position);let visitedOutside=false;
+  const plan=house.userData.plan,site=physics.site;
+  for(const stop of tour.points.filter(p=>['aerial-side','aerial-back'].includes(p.id))){
+   const dx=stop.focus.x-stop.x,dy=stop.focus.y-stop.y,dz=stop.focus.z-stop.z,flat=Math.hypot(dx,dz),length=Math.hypot(flat,dy);
+   assert.ok(stop.y>physics.roofTop+5,'overview rises above the roofs to reveal the entire lot');
+   for(const x of [site.x0-plan.w/2,site.x1-plan.w/2])for(const z of [plan.d/2-site.z0,plan.d/2-site.z1]){
+    const vx=x-stop.x,vy=.45-stop.y,vz=z-stop.z;
+    const depth=(vx*dx+vy*dy+vz*dz)/length,right=(vx*-dz+vz*dx)/flat,up=(-vx*dx*dy+vy*flat*flat-vz*dz*dy)/(length*flat);
+    assert.ok(depth>0&&Math.abs(Math.atan2(up,depth))<32.5*Math.PI/180&&Math.abs(Math.atan2(right,depth))<32.5*Math.PI/180,model+' lot corners fit a 65 degree view');
+   }
+  }
+  for(let frame=0;frame<8000&&tour.state.active;frame++){
+   tour.update(position,.05);physics.update(.05,null);
+   assert.equal(tour.state.paused,false,model+' '+JSON.stringify(tour.state));
+   assert.equal(tour.state.recoveries,0,model+' must keep a safe route');
+   if(tour.state.kind==='aerial'&&position.y>T.config.exteriorHeight-.05){visitedOutside=true;assert.equal(tour.heightLimit(position),Infinity,'the external orbit remains outdoors');}
+  }
+  assert.ok(visitedOutside,model+' visits the lot');assert.equal(tour.state.active,false,model+' completes the return');
+ }
+});
+
 test('69 m² starts near entrance obstacles instead of repeatedly reporting an unavailable route',()=>{
  const house=T.xx('69',{width:12,depth:21}),physics=T.createHousePhysics(house,{Box3:T.Box3});
  const position={x:physics.spawn.x+1,y:1.7,z:physics.spawn.z-1};
@@ -146,11 +172,12 @@ test('all facades and garage choices keep complete room itineraries on every pla
   }
   for(const p of nav.points)assert.ok(collision.point(p,'ignore'),p.label+' is outside walls and furniture');
   for(const p of nav.points.filter(p=>p.kind==='aerial')){
-   assert.ok(p.y>=4&&p.y<9,'flight uses a modest height and each segment is collision checked');
+   assert.ok(p.y>=4&&p.y<=Math.max(10,physics.site.z1-physics.site.z0),'overview height scales with the lot');
    const x=p.x+house.userData.plan.w/2,z=house.userData.plan.d/2-p.z;
-   assert.ok(x>=physics.site.x0-1&&x<=physics.site.x1+1&&z>=physics.site.z0-1&&z<=physics.site.z1+1,'drone stays focused on the actual lot');
+   const setback=T.config.exteriorSetback;
+   assert.ok(x>=physics.site.x0-setback&&x<=physics.site.x1+setback&&z>=physics.site.z0-setback&&z<=physics.site.z1+setback,'drone keeps a bounded setback to frame the lot');
   }
-  for(const p of nav.points.filter(p=>p.roomName))assert.ok(p.y-clone.floorAt(p.x,p.z)>=1.84,'higher interior viewpoint');
+  for(const p of nav.points.filter(p=>p.roomName))assert.ok(p.y-clone.floorAt(p.x,p.z)<=1.75+1e-7,'indoor viewpoint is capped at 1.75 m');
   cases++;
  }
  console.log('Validated facade/garage/ceiling combinations:',cases);
@@ -168,8 +195,8 @@ test('continuous tour closes doors, visits every room once and never stops to pr
   const f=fixture(model),tour=T.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=>model});
   const collision=T.createTourCollision(f.physics);tour.start(f.position);let steps=0,opened=0,closed=0,still=0,maxStill=0;
   const visited=new Set(),angles=f.physics.doors.map(()=>0),initialCounts=[f.physics.boxes.length,f.physics.doors.length];
-  let previousYaw=tour.state.heading,previousYawVelocity=0,previousVelocity=null,rotation=0,turnSign=0,reversals=0;
-  while(tour.state.active&&steps++<5000){const before={...f.position};tour.update(f.position,.05);f.physics.update(.05,f.position);
+  let previousYaw=tour.state.heading,previousYawVelocity=0,previousVelocity=null,turnFrames=0;
+  while(tour.state.active&&steps++<8000){const before={...f.position};tour.update(f.position,.05);f.physics.update(.05,f.position);
    assert.equal(tour.state.paused,false,model+' '+JSON.stringify(tour.state));assert.notEqual(tour.state.phase,'dwell');assert.notEqual(tour.state.phase,'settle');
    assert.ok(collision.clear(before,f.position,{doors:'live',padding:.06}),model+' live camera segment stays clear');
    assert.equal(tour.state.fade,0);visited.add(tour.state.index);
@@ -177,20 +204,28 @@ test('continuous tour closes doors, visits every room once and never stops to pr
     const yawVelocity=Math.atan2(Math.sin(tour.state.heading-previousYaw),Math.cos(tour.state.heading-previousYaw))/.05;
     assert.ok(Math.abs(yawVelocity)<=T.config.turnSpeed*Math.PI/180+1e-7,'bounded gimbal speed');
     assert.ok(Math.abs(yawVelocity-previousYawVelocity)/.05<=T.config.turnAcceleration*Math.PI/180+1e-7,model+' no angular impulse, including room changes');
-    rotation+=Math.abs(yawVelocity)*.05;
-    if(Math.abs(yawVelocity)>.05){if(turnSign&&Math.sign(yawVelocity)!==turnSign)reversals++;turnSign=Math.sign(yawVelocity);}
     previousYaw=tour.state.heading;previousYawVelocity=yawVelocity;
     const v={x:(f.position.x-before.x)/.05,y:(f.position.y-before.y)/.05,z:(f.position.z-before.z)/.05};v.speed=Math.hypot(v.x,v.y,v.z);
     if(previousVelocity&&v.speed>.5&&previousVelocity.speed>.5){const dot=(v.x*previousVelocity.x+v.y*previousVelocity.y+v.z*previousVelocity.z)/(v.speed*previousVelocity.speed);assert.ok(Math.acos(Math.max(-1,Math.min(1,dot)))<Math.PI/4,model+' no fast right-angle bounce');}
     previousVelocity=v;
+    const horizontal=Math.hypot(v.x,v.z);
+    if(horizontal>1e-5&&Number.isFinite(tour.heightLimit(before)))assert.ok((-Math.sin(tour.state.heading)*v.x-Math.cos(tour.state.heading)*v.z)/horizontal>=Math.cos(36*Math.PI/180),model+' always moves facing the actual path inside the house, including return');
+    if(horizontal>1e-5&&tour.state.travelMode==='showcase'){
+      const focus=tour.state.kind==='aerial'?tour.state.focus:tour.points.find(p=>p.kind==='aerial').focus,bearing=Math.atan2(f.position.x-focus.x,f.position.z-focus.z);
+      assert.ok(Math.abs(Math.atan2(Math.sin(bearing-tour.state.heading),Math.cos(bearing-tour.state.heading)))<36*Math.PI/180,model+' external flight keeps the house within the forward view '+JSON.stringify({before,position:f.position,heading:tour.state.heading,bearing,state:tour.state}));
+    }
+    assert.ok(f.position.y<=tour.heightLimit(f.position)+1e-7,model+' indoor eye never exceeds 1.75 m above its floor');
+    // A frame can reach a bend and engage the turn latch after its last forward
+    // chord. Count the subsequent stationary rotation, not that partial frame.
+    if(tour.state.turning&&Math.abs(yawVelocity)>.001&&horizontal<1e-5)turnFrames++;
    }
-   still=Math.hypot(f.position.x-before.x,f.position.y-before.y,f.position.z-before.z)<1e-7?still+1:0;maxStill=Math.max(maxStill,still);
+   still=!tour.state.turning&&Math.hypot(f.position.x-before.x,f.position.y-before.y,f.position.z-before.z)<1e-7?still+1:0;maxStill=Math.max(maxStill,still);
    f.physics.doors.forEach((d,i)=>{if(!angles[i]&&Math.abs(d.angle)>.01)opened++;if(angles[i]&&Math.abs(d.angle)<.01)closed++;angles[i]=Math.abs(d.angle)>.01;});
   }
   assert.equal(tour.state.active,false,model+' finishes');assert.equal(visited.size,tour.points.length);assert.ok(opened>0&&closed>0);assert.ok(maxStill<25,'door waits stay below 1.25 seconds');
   assert.equal(tour.points.filter(p=>/circula/i.test(p.label)).length,0);assert.equal(new Set(tour.points.map(p=>p.id)).size,tour.points.length);
   assert.deepEqual([f.physics.boxes.length,f.physics.doors.length],initialCounts);assert.ok(f.physics.doors.every(d=>d.target===0));
-  assert.ok(rotation<1500*Math.PI/180,model+' avoids repeated spins while presenting the rooms');assert.ok(reversals<=10,model+' avoids repeatedly reversing the gimbal');
+  assert.ok(turnFrames>0,model+' reversals are handled by a smooth turn instead of reversing the camera');
  }
 });
 

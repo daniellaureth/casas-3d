@@ -37,7 +37,7 @@ function createTourCollision(physics,margin=.14){
 
 // Routes are prepared once, off the render thread.
 function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
-  const eye=Math.max(physics.eyeHeight,Math.min(config.eyeHeight??1.95,2));
+  const eye=Math.min(config.eyeHeight??1.75,1.75);
   const step=config.grid,margin=4,minX=Math.min(-plan.w/2-margin,position.x-1),minZ=Math.min(-plan.d/2-margin,position.z-1);
   const maxX=Math.max(plan.w/2+margin,position.x+1),maxZ=Math.max(plan.d/2+margin,position.z+1,physics.spawn.z+1);
   const width=Math.ceil((maxX-minX)/step)+1,height=Math.ceil((maxZ-minZ)/step)+1,count=width*height;
@@ -87,13 +87,18 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
   }
   flood(nearest(physics.spawn));reachable=new Uint8Array(count);
   for(let id=0;id<count;id++)reachable[id]=Number(parent[id]!==-2);
-  // A compact ellipse follows the lot, with the house as the visual subject.
+  // A rounded perimeter keeps the whole lot in view. An inscribed ellipse
+  // cuts across the building's corners and turns the presentation into roofs.
   const site=physics.site||{x0:-3,x1:plan.w+3,z0:-4,z1:plan.d+4};
   const center={x:(site.x0+site.x1)/2-plan.w/2,z:plan.d/2-(site.z0+site.z1)/2};
-  const altitude=config.exteriorHeight??4.4;
-  const radiusX=Math.max(plan.w/2+1,(site.x1-site.x0)/2-.9),radiusZ=Math.max(plan.d/2+1,(site.z1-site.z0)/2-1.3);
+  const altitude=config.exteriorHeight??4.4,setback=config.exteriorSetback??2.5;
+  const overviewHeight=config.overviewHeight??Math.max(10,site.x1-site.x0,site.z1-site.z0);
+  const radiusX=(site.x1-site.x0)/2+setback,radiusZ=(site.z1-site.z0)/2+setback,orbitPower=.55;
   const exteriorFocus={x:0,y:1.7,z:Math.max(-plan.d*.22,center.z*.35)};
-  function orbitPoint(angle){return {x:center.x+radiusX*Math.sin(angle),y:altitude,z:center.z+radiusZ*Math.cos(angle),view:exteriorFocus};}
+  const lotFocus={x:center.x,y:.45,z:center.z};
+  const signedPower=(v,p)=>Math.sign(v)*Math.abs(v)**p;
+  function orbitPoint(angle,y=altitude){return {x:center.x+radiusX*signedPower(Math.sin(angle),orbitPower),y,z:center.z+radiusZ*signedPower(Math.cos(angle),orbitPower),view:exteriorFocus};}
+  function orbitAngle(p){return Math.atan2(signedPower((p.x-center.x)/radiusX,1/orbitPower),signedPower((p.z-center.z)/radiusZ,1/orbitPower));}
   function aerial(p){
     // Street-level visitors are outside the closed lot, even at walking height.
     // Use the checked takeoff/landing connection rather than asking the ground
@@ -209,10 +214,17 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
       const result=smooth(first,true);
       return result;
     }
+    // Return around the building, not across its centre. Flying directly over
+    // the subject puts the whole house below the headset's neutral field of
+    // view and makes the gimbal spin as the centre passes underneath it.
+    if(from.kind==='aerial'&&!aerial(to)){
+      const front={...points.find(p=>p.kind==='aerial')};
+      if(distance(from,front)>.1){const arc=rawRoute(from,front),landing=rawRoute(front,to);if(!arc||!landing)return null;return [...arc,...landing.slice(1)];}
+    }
     if(from.kind==='aerial'&&to.kind==='aerial'){
-      const angle=Math.atan2((from.x-center.x)/radiusX,(from.z-center.z)/radiusZ),end=Math.atan2((to.x-center.x)/radiusX,(to.z-center.z)/radiusZ);
+      const angle=orbitAngle(from),end=orbitAngle(to);
       const sweep=Math.atan2(Math.sin(end-angle),Math.cos(end-angle)),n=Math.max(1,Math.ceil(Math.abs(sweep)/(Math.PI/60)));
-      const arc=[{...from,view:exteriorFocus}];for(let j=1;j<=n;j++)arc.push(orbitPoint(angle+sweep*j/n));arc[n]={...to,view:exteriorFocus};
+      const arc=[{...from,view:to.focus||exteriorFocus}];for(let j=1;j<=n;j++)arc.push(orbitPoint(angle+sweep*j/n,from.y+(to.y-from.y)*j/n));arc[n]={...to,view:to.focus||exteriorFocus};
       if(arc.every((p,i)=>!i||flightClear(arc[i-1],p)))return arc;
     }
     if(aerial(from)&&aerial(to)){
@@ -238,8 +250,9 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
   for(const stop of config.stops){const spec={...stop,...config.models?.[model]?.[stop.id]};let target,bounds,focus,name=spec.label,roomName;
     if(spec.kind==='aerial'){
       const angle=(spec.angle??0)*Math.PI/180;
-      target=orbitPoint(angle);
-      points.push({...target,y:altitude,kind:'aerial',id:spec.id,label:name,dwell:spec.dwell??config.dwell,focus:exteriorFocus,heading:viewHeading(target,exteriorFocus)});continue;
+      const focus=spec.overview?lotFocus:exteriorFocus;
+      target=orbitPoint(angle,spec.overview?overviewHeight:altitude);
+      points.push({...target,kind:'aerial',id:spec.id,label:name,dwell:spec.dwell??config.dwell,focus,heading:viewHeading(target,focus)});continue;
     }
     if(Number.isFinite(spec.x)&&Number.isFinite(spec.z))target=spec;
     else if(spec.kind==='entry')target=physics.spawn;
@@ -288,11 +301,23 @@ function buildHouseTour({physics,plan,model,position,config=CASA_TOUR_CONFIG}) {
 }
 
 function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,onChange=()=>{},plannerFactory=()=>null}) {
-  const state={active:false,paused:false,label:'',phase:'idle',index:0,total:0,revision:0,fade:0,message:'',focus:null,heading:null,kind:'room',failure:null,recoveries:0,doorWait:false};
-  let navigation=null,physics=null,path=null,cursor=1,speed=0,hold=0,turnSpeed=0,remaining=[],speedLimits=[];
+  const state={active:false,paused:false,label:'',phase:'idle',index:0,total:0,revision:0,fade:0,message:'',focus:null,heading:null,kind:'room',failure:null,recoveries:0,doorWait:false,turning:false};
+  let navigation=null,physics=null,path=null,cursor=1,speed=0,hold=0,turnSpeed=0,remaining=[],speedLimits=[],houseFocus=null;
   let planner=null,generation=0,requestId=0,lastPosition=null,restartIndex=null;
   let collision=null,repairs=0;const lastSafe={x:0,y:0,z:0},candidate={x:0,y:0,z:0},probe={x:0,y:0,z:0};
   const lookAhead={x:0,y:0,z:0};let filteredHeading=0;
+  function heightLimit(p){
+    const plan=getPlan();if(!physics||p.y>(physics.roofTop||4)+.1)return Infinity;
+    // A low roof can sit below the tallest facade. Above that roof the eye is
+    // outdoors, even when its X/Z overlaps a room on a compact lot.
+    if(p.y>physics.floorAt(p.x,p.z)+2.4)for(const roof of physics.flightBoxes||[]){
+      if(roof.bottom>=2.4&&p.y>roof.top+.06&&p.x>=roof.minX&&p.x<=roof.maxX&&p.z>=roof.minZ&&p.z<=roof.maxZ)return Infinity;
+    }
+    for(const room of plan.rooms){const [,x,z,w,d]=room;
+      if(p.x>=x-plan.w/2&&p.x<=x+w-plan.w/2&&p.z>=plan.d/2-z-d&&p.z<=plan.d/2-z)return physics.floorAt(p.x,p.z)+1.75;
+    }
+    return Infinity;
+  }
   function remember(p){lastSafe.x=p.x;lastSafe.y=p.y;lastSafe.z=p.z;}
   function recover(position){
     position.x=lastSafe.x;position.y=lastSafe.y;position.z=lastSafe.z;state.recoveries++;speed=0;
@@ -367,7 +392,12 @@ function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,on
   function setRoute(index,position,prepared,continuous=false){
     if(index>=navigation.points.length){stop('Tour concluído.');return;}
     state.index=Math.max(0,index);restartIndex=state.index;state.failure=null;const destination=navigation.points[state.index];state.label=destination.label;state.focus=destination.focus||null;state.kind=destination.kind||'room';state.message='Assista sentado. O tour apresenta a casa à frente; olhe livremente para os lados.';
+    houseFocus=destination.kind==='aerial'?destination.focus:navigation.points.find(p=>p.kind==='aerial')?.focus||destination.focus;
     path=prepared!==undefined?prepared:navigation.route(position,destination);cursor=1;if(!continuous)speed=0;state.fade=0;
+    // Do not rotate the whole chair just to correct a few centimetres of grid
+    // rounding at the entrance. Raise the eye vertically at its actual X/Z.
+    if(path&&destination.kind!=='aerial'&&!destination.bounds&&Math.hypot(destination.x-position.x,destination.z-position.z)<.15)path=[{...position},{...position,y:destination.y}];
+    if(path)path=path.map((p,i)=>i?{...p,y:Math.min(p.y,heightLimit(p))}:p);
     if(path&&!path.every((p,i)=>!i||collision.clear(path[i-1],p,{doors:'ignore',padding:.06})))path=null;
     if(path){
       remaining=new Float64Array(path.length);for(let i=path.length-2;i>=0;i--)remaining[i]=remaining[i+1]+Math.hypot(path[i+1].x-path[i].x,path[i+1].y-path[i].y,path[i+1].z-path[i].z);
@@ -377,7 +407,7 @@ function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,on
     changed();
   }
   function start(position,heading=0,startIndex=null,repair=false){generation++;requestId++;planner?.dispose();planner=null;physics=getPhysics();collision=createTourCollision(physics,config.cameraMargin??.14);lastPosition=position;if(!repair){repairs=0;state.recoveries=0;remember(position);}for(const door of physics.doors||[])door.target=0;const token=generation;navigation=null;restartIndex=startIndex;state.total=0;state.index=startIndex??0;state.focus=null;state.heading=heading;state.failure=null;turnSpeed=0;
-    filteredHeading=heading;state.active=true;state.paused=false;state.fade=0;state.phase='planning';state.label='Preparando tour…';state.message='O percurso está sendo calculado.';changed();
+    filteredHeading=heading;state.turning=false;state.active=true;state.paused=false;state.fade=0;state.phase='planning';state.label='Preparando tour…';state.message='O percurso está sendo calculado.';changed();
     try{planner=plannerFactory();if(planner){
       const origin={x:position.x,y:position.y,z:position.z};planner.build({physics,plan:getPlan(),model:getModel(),position:origin,config,startIndex}).then(result=>{
         if(!state.active||generation!==token)return;navigation=result;state.total=result.points.length;setRoute(result.index,origin,result.path);
@@ -421,23 +451,39 @@ function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,on
     }
     const dx=aim.x-position.x,dy=aim.y-position.y,dz=aim.z-position.z,distance=Math.hypot(dx,dy,dz);
     const left=distance+remaining[cursor];
-    // Interpolate the look-ahead by travelled distance, not discrete vertices.
-    // Never turn toward a point that just passed behind the camera. Each room
-    // keeps one framing throughout the shot instead of alternating between the
-    // direction of travel and the room centre when crossing its boundary.
+    // Indoors, travel facing forward. A room focus must never make the base
+    // fly backwards. Anticipate only a small angle of the upcoming bend; turn
+    // in place before reversals while keeping native head tracking independent.
     const look=sampleAhead(position,config.lookAhead??2.2);
-    const heading=destination.bounds?destination.heading:aim.view?aimHeading(position,aim.view):Math.hypot(look.x-position.x,look.z-position.z)>.45?aimHeading(position,look):filteredHeading;
+    const horizontal=Math.hypot(dx,dz),bearing=horizontal>1e-6?Math.atan2(-dx,-dz):filteredHeading;
+    const ahead=Math.hypot(look.x-position.x,look.z-position.z)>.45?aimHeading(position,look):bearing;
+    const outdoors=!Number.isFinite(heightLimit(position));
+    const frontal=!outdoors||Number.isFinite(heightLimit(aim));
+    state.travelMode=frontal?'forward':'showcase';
+    const heading=!frontal&&houseFocus?aimHeading(position,houseFocus):bearing+Math.max(-12*radians,Math.min(12*radians,difference(ahead,bearing)));
     turn(heading,dt);
+    // Outside, backing away is allowed, but only with the house framed. Wait
+    // for the pan at the exit instead of flying away looking at empty horizon.
+    const facingError=!frontal?Math.abs(difference(heading,state.heading)):horizontal>1e-6?Math.abs(difference(bearing,state.heading)):0;
+    if(facingError>35*radians)state.turning=true;
+    else if(facingError<15*radians)state.turning=false;
+    if(state.turning){speed=0;return true;}
     const plan=getPlan(),exterior=position.y>physics.floorAt(position.x,position.z)+2.3||(destination.kind==='aerial'&&(Math.abs(position.x)>plan.w/2+.5||Math.abs(position.z)>plan.d/2+.5));
     const cruise=exterior?(config.exteriorSpeed??config.speed):config.speed;
     const braking=destination.dwell>0||state.index===state.total-1?Math.sqrt(2*config.acceleration*left):cruise;
     const cornerSpeed=Math.sqrt(speedLimits[cursor]**2+2*config.acceleration*distance);
-    const target=Math.min(cruise,braking,cornerSpeed);speed+=Math.max(-config.acceleration*dt,Math.min(config.acceleration*dt,target-speed));
+    const alignmentSpeed=cruise*Math.max(0,Math.min(1,(35*radians-facingError)/(20*radians)));
+    const target=Math.min(cruise,braking,cornerSpeed,alignmentSpeed);speed+=Math.max(-config.acceleration*dt,Math.min(config.acceleration*dt,target-speed));
     // Camera flight, not a walking body. Architectural clearance is precomputed.
     let travel=speed*dt;
     while(travel>0&&cursor<path.length){
       const p=path[cursor],x=p.x-position.x,y=p.y-position.y,z=p.z-position.z,d=Math.hypot(x,y,z);
+      // One update may cross multiple small chords: validate each direction,
+      // including the first chord after a waypoint, before consuming distance.
+      const endpointIndoors=Number.isFinite(heightLimit(p));
+      if((!outdoors||endpointIndoors)&&Math.hypot(x,z)>1e-6&&Math.abs(difference(Math.atan2(-x,-z),state.heading))>35*radians){speed=0;state.turning=true;break;}
       const t=d?Math.min(1,travel/d):1;candidate.x=position.x+x*t;candidate.y=position.y+y*t;candidate.z=position.z+z*t;
+      candidate.y=Math.min(candidate.y,heightLimit(candidate));
       if(!collision.clear(position,candidate,{doors:'ignore',padding:.06})){recover(position);return true;}
       if(physics.doors.some(door=>{
         if(collision.doorHits(position,candidate,door,door.angle,.14))return true;
@@ -451,5 +497,5 @@ function createHouseTour({getPhysics,getPlan,getModel,config=CASA_TOUR_CONFIG,on
     }
     return true;
   }
-  return {state,start,action,stop,update,recover,validHead:(from,to)=>collision?.clear(from,to,{doors:'live',padding:.06})??true,get safePosition(){return lastSafe;},get points(){return navigation?.points||[];}};
+  return {state,start,action,stop,update,recover,heightLimit,validHead:(from,to)=>collision?.clear(from,to,{doors:'live',padding:.06})??true,get safePosition(){return lastSafe;},get points(){return navigation?.points||[];}};
 }

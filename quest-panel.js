@@ -97,10 +97,11 @@ function createQuestPanel({scene,camera,Group,Mesh,PlaneGeometry,CanvasTexture,M
     text(inputHint,35,792,21,'#637364');texture.needsUpdate=true;
   }
   function place(head,forward) {
-    const length=Math.hypot(forward.x,forward.z)||1;
+    const aerial=!!getTourState()?.active&&forward.y<-.15;
+    const length=(aerial?forward.length():Math.hypot(forward.x,forward.z))||1;
     root.scale.setScalar(1.08);
-    root.position.set(head.x+forward.x/length*1.15,head.y-.10,head.z+forward.z/length*1.15);
-    root.lookAt(head.x,root.position.y,head.z);root.updateMatrixWorld(true);
+    root.position.set(head.x+forward.x/length*1.15,head.y-.10+(aerial?forward.y/length*1.15:0),head.z+forward.z/length*1.15);
+    root.lookAt(head.x,aerial?head.y:root.position.y,head.z);root.updateMatrixWorld(true);
   }
   function open(head,forward) {root.visible=true;dock.visible=false;place(head,forward);draw();}
   function close() {root.visible=false;dock.visible=true;}

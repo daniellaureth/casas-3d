@@ -86,3 +86,23 @@ Ajustes futuros em `tour-config.js`: `cornerRadius`, `lateralAcceleration`, `loo
 Verificação visual da 1.7.1: tours completos com o WebXRManager real e poses simuladas nas quatro plantas; zero recuperação de posição e zero cortina preta. Contadores permaneceram em 3 luzes e 13 texturas, com pico de 174 draw calls estéreo em 50/60 m² e 206 em 62/69 m², iguais à revisão anterior. O pacote de produção passou nos comandos de iniciar/pausar/continuar e na retomada após falha simulada do Worker. A sessão VR também passou em avançar/voltar, encerrar e reentrar.
 
 A comparação quantitativa de movimento acima usa lote de 15 × 30 m. A revisão visual usa os lotes padrão de cada planta, por isso as durações não são diretamente comparáveis. FPS, latência e conforto no Quest físico continuam dependendo de validação no aparelho.
+
+## Altura e deslocamento de frente — versão 1.7.2
+
+Backup: `backups/antes-tour-frente-altura-1.7.1.bundle`.
+
+A altura automática interna agora é de no máximo 1,75 m acima do piso local. O limite também é verificado durante a interpolação entre pisos e aplicado à visão renderizada no Quest caso o visitante levante a cabeça. A orientação física da cabeça permanece livre. O passeio aéreo externo mantém sua altitude própria.
+
+Dentro da casa, a orientação da base acompanha a direção real de cada trecho. Há pequena antecipação das curvas, com os mesmos limites suaves de velocidade e aceleração angular. Antes de uma inversão, o tour gira no lugar e só retoma o avanço quando está alinhado; esse giro faz parte do passeio e não exige clicar em Continuar. Dentro da casa, cada segmento consumido no frame é verificado para impedir que o movimento avance para trás, inclusive ao mudar de ambiente. Na parte externa, o recuo cinematográfico é permitido e a câmera mantém a casa enquadrada; o deslocamento aguarda o enquadramento na saída, evitando voar olhando para rua/horizonte vazio.
+
+Essa preferência substitui o enquadramento fixo por cômodo da 1.7.1. Voltar por uma porta agora exige uma manobra de orientação, portanto o tour pode durar mais que a versão que recuava olhando para dentro do cômodo. Os testes de suavidade foram mantidos; os testes de percurso agora também verificam avanço frontal, giro parado antes das inversões e altura interna. Foi acrescentado um teste da câmera real do WebXRManager para levantar a cabeça durante a sessão sem ultrapassar o limite nem substituir pitch, yaw ou roll nativos.
+
+A vista externa foi ampliada para mostrar o lote de cima. O percurso usa um contorno arredondado com afastamento configurável (`exteriorSetback`, padrão 2,5 m), apresenta a fachada e sobe gradualmente para os pontos `overview`. A altura aérea desses pontos acompanha a maior dimensão do lote, com foco no centro do terreno. Os testes verificam que os quatro cantos do lote cabem em um campo de visão de 65 graus nos pontos de apresentação. O retorno acompanha a lateral, evitando cruzar diretamente sobre o centro da casa.
+
+O limite de 1,75 m distingue interior de voo acima de lajes mais baixas que a fachada; essa diferença foi coberta por regressão para os lotes compactos das quatro plantas.
+
+Após confirmação do usuário, o trecho aéreo em VR inclina suavemente a base da apresentação para mostrar o lote de cima. A inclinação é limitada a aproximadamente 12 graus/s e aceleração de 10 graus/s², reduzindo-se na descida. O quaternion nativo do headset permanece intacto; a rotação é ancorada no olho sentado e respeita a direção calibrada, inclusive ao começar olhando de lado. Pausar mantém a base fixa e a cabeça livre. Cancelar ou sair da sessão restaura a base nivelada; o interior permanece sem inclinação automática. O menu aberto acompanha a linha de visão inclinada durante o tour; o painel compacto permanece no canto.
+
+Revisão visual da 1.7.2 com WebXRManager e poses simuladas: tours completos de 50, 60, 62 e 69 m² em aproximadamente 154, 172, 226 e 243 segundos; 369 capturas ao todo, sem cortina preta, pausas por rota indisponível ou recuperação de posição. A subida revela o lote completo, seguida da passagem sobre os ângulos laterais/fundos e descida de volta à fachada. Iniciar, pausar, continuar, avançar, voltar, encerrar e reentrar foram verificados, incluindo abrir/fechar o menu com a visão apontada para baixo acima de 15 m.
+
+Os contadores permaneceram em 3 luzes e 13 texturas; o pico observado foi de 186/188/218/218 draw calls estéreo nas plantas 50/60/62/69, respectivamente. O enquadramento mais amplo torna mais objetos visíveis; não houve adição de iluminação, texturas ou pós-processamento. Esses testes não medem FPS, latência ou conforto no Quest físico.

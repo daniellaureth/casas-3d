@@ -38,6 +38,7 @@ test('automatic tour leaves the entrance and visits rooms with continuous tracke
       opened||=f.physics.doors.some(d=>Math.abs(d.angle)>.1);seen.add(tour.state.index);assert.equal(tour.state.paused,false,model+' '+JSON.stringify(tour.state));
       assert.equal(pose.curtain&&tour.state.fade===0,false,model+' wall protection');
       assert.ok(f.camera.quaternion.angleTo(pose.tracking)<1e-7,'head remains tracked');
+      if(tour.state.active)assert.ok(pose.head[1]<=tour.heightLimit({x:pose.head[0],y:pose.head[1],z:pose.head[2]})+1e-7,model+' rendered indoor eye stays at or below 1.75 m');
       if(i===72*25)assert.ok(tour.state.index>0,'must automatically leave Entrada: '+JSON.stringify(tour.state));
     }
     assert.equal(tour.state.active,false,model+' completes every room: '+JSON.stringify(tour.state));
@@ -47,24 +48,62 @@ test('automatic tour leaves the entrance and visits rooms with continuous tracke
   }
 });
 
+test('seated head height is capped indoors without replacing native orientation',async()=>{
+ let tour;const f=fixture('50',undefined,{getTour:()=>tour});
+ tour=f.api.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=> '50'});
+ await f.mode.enter();f.tick(0,{y:1.15});f.mode.tourAction('start');let i=0;
+ while(tour.state.index<2&&i++<5000)f.tick(i*1000/72,{y:1.15});
+ assert.equal(tour.state.index,2);f.mode.tourAction('pause');
+ const pose=f.tick(++i*1000/72,{y:1.45,yaw:.3,pitch:.1,roll:.02}),p={x:pose.head[0],y:pose.head[1],z:pose.head[2]},limit=tour.heightLimit(p);
+ assert.ok(Number.isFinite(limit),'test eye is actually inside the house');assert.ok(p.y<=limit+1e-7);
+ assert.ok(f.camera.quaternion.angleTo(pose.tracking)<1e-7);assert.equal(pose.curtain,false);
+ await f.mode.end();assert.deepEqual(f.errors,[]);
+});
+
+test('aerial tilt frames the lot, preserves a sideways seated calibration and levels on cancel and reentry',async()=>{
+ const location={x:8,y:21,z:10},focus={x:0,y:.45,z:0};let indoors=false;
+ const tour={state:{active:false,paused:false,heading:null,focus,fade:0},heightLimit:()=>indoors?1.75:Infinity,validHead:()=>true,
+  action(type,body){if(type==='stop'){this.state.active=false;this.state.heading=null;Object.assign(body,{x:f.physics.spawn.x,y:1.7,z:f.physics.spawn.z});}else{this.state.active=true;this.state.heading=Math.atan2(location.x,location.z);}},
+  update(body){if(!this.state.paused)Object.assign(body,location);},stop(){this.state.active=false;}};
+ const f=fixture('50',undefined,{getTour:()=>tour});await f.mode.enter();f.tick(0,{yaw:.7,y:1.15});f.mode.tourAction('start');
+ let pose,previous=0,maxChange=0;
+ for(let i=1;i<=1200;i++){
+  pose=f.tick(i*1000/72,{yaw:.7,y:1.15});const dir=f.camera.getWorldDirection(new f.api.Vector3()),pitch=Math.asin(dir.y);
+  maxChange=Math.max(maxChange,Math.abs(pitch-previous));previous=pitch;
+  assert.ok(f.camera.quaternion.angleTo(pose.tracking)<1e-7,'native pose is not overwritten');assert.equal(pose.curtain,false);
+ }
+ const wanted=new f.api.Vector3(focus.x-location.x,focus.y-location.y,focus.z-location.z).normalize();
+ assert.ok(f.camera.getWorldDirection(new f.api.Vector3()).dot(wanted)>.999,'neutral seated view points down at the lot');
+ assert.ok(Math.hypot(...pose.head.map((v,i)=>v-[location.x,location.y,location.z][i]))<1e-6,'rotation stays anchored to the seated eye');
+ assert.ok(maxChange<=.21/72+1e-6,'tilt is limited to 12 degrees per second');
+ tour.state.paused=true;const base=f.camera.parent.quaternion.clone();
+ pose=f.tick(1201*1000/72,{yaw:1.4,pitch:.15,roll:.05,y:1.15});
+ assert.ok(base.angleTo(f.camera.parent.quaternion)<1e-7,'pause freezes the base');assert.ok(f.camera.quaternion.angleTo(pose.tracking)<1e-7);
+ f.mode.tourAction('stop');f.tick(1202*1000/72,{yaw:.7,y:1.15});
+ assert.ok(Math.abs(f.camera.getWorldDirection(new f.api.Vector3()).y)<1e-7,'cancel returns to level walking');
+ await f.mode.end();await f.mode.enter();f.tick(0,{y:1.15});assert.ok(Math.abs(f.camera.getWorldDirection(new f.api.Vector3()).y)<1e-7);await f.mode.end();assert.deepEqual(f.errors,[]);
+});
+
 test('seated visitor sees each room ahead while retaining 180 degrees of head movement',async()=>{
  let tour;const f=fixture('69',undefined,{getTour:()=>tour});
  tour=f.api.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=> '69',config:{...f.api.config,dwell:.1,stops:f.api.config.stops.map(s=>({...s,dwell:.1}))}});
- const neutral=.65;await f.mode.enter();f.tick(0,{y:1.15,yaw:neutral});f.mode.tourAction('start');let i=0,previousYaw=f.camera.parent.rotation.y,turns=0;const seen=new Set();
+ const neutral=.65;await f.mode.enter();f.tick(0,{y:1.15,yaw:neutral});f.mode.tourAction('start');let i=0,previousYaw=tour.state.heading,turns=0;const seen=new Set();
  while(tour.state.active&&i++<72*600){
   const side=Math.PI/2*Math.sin(i*.018),pose=f.tick(i*1000/72,{y:1.15,yaw:neutral+side});
-  const rig=f.camera.parent,change=rig.rotation.y-previousYaw;previousYaw=rig.rotation.y;
+  const rig=f.camera.parent,change=tour.state.active?tour.state.heading-previousYaw:0;previousYaw=tour.state.heading;
   assert.ok(Math.abs(change)<=f.api.config.turnSpeed*Math.PI/180/72+1e-6,'continuous gentle yaw');assert.equal(tour.state.fade,0,'no blackout during flight');if(Math.abs(change)>.001)turns++;
-  assert.equal(rig.rotation.x,0);assert.equal(rig.rotation.z,0);assert.ok(f.camera.quaternion.angleTo(pose.tracking)<1e-7,'head pose is never replaced');
+  const indoors=Number.isFinite(tour.heightLimit({x:pose.head[0],y:pose.head[1],z:pose.head[2]}));
+  if(indoors){assert.ok(Math.abs(rig.rotation.x)<1e-7);assert.ok(Math.abs(rig.rotation.z)<1e-7);}
+  assert.ok(f.camera.quaternion.angleTo(pose.tracking)<1e-7,'head pose is never replaced');
   if(tour.state.phase==='dwell'){
    seen.add(tour.state.index);const p=tour.points[tour.state.index],head=f.camera.getWorldPosition(new f.api.Vector3()),look=f.camera.getWorldDirection(new f.api.Vector3());
    const targetYaw=Math.atan2(head.x-p.focus.x,head.z-p.focus.z),actualYaw=Math.atan2(-look.x,-look.z);
    const error=Math.atan2(Math.sin(actualYaw-targetYaw-side),Math.cos(actualYaw-targetYaw-side));
    const calibratedError=Math.atan2(Math.sin(actualYaw-tour.state.heading-side),Math.cos(actualYaw-tour.state.heading-side));
-   assert.ok(Math.abs(calibratedError)<1e-7,'head turning remains relative to the seated forward direction');
+   if(indoors)assert.ok(Math.abs(calibratedError)<1e-7,'head turning remains relative to the seated forward direction');
    // Physical/optical eye translations remain free, especially in tiny hallways;
    // framing must keep the subject ahead without steering against that motion.
-   assert.ok(Math.abs(error)<Math.PI/6,'neutral chair direction faces '+p.label+' '+error);
+   if(indoors)assert.ok(Math.abs(error)<Math.PI/6,'neutral chair direction faces '+p.label+' '+error);
    assert.ok(Math.abs(head.y-p.y)<.07,'seated eye height is raised for '+p.label);
   }
  }
@@ -152,5 +191,5 @@ test('an invalid physical head offset during the tour recovers before a black fr
  let tour;const f=fixture('62',undefined,{getTour:()=>tour});tour=f.api.createHouseTour({getPhysics:()=>f.physics,getPlan:()=>f.house.userData.plan,getModel:()=> '62'});
  await f.mode.enter();f.tick(0);f.mode.tourAction('start');for(let i=1;i<100;i++)f.tick(i*14);
  const bad=f.tick(1400,{x:8,y:-4,z:3,yaw:.4,pitch:.1,roll:.05});assert.equal(bad.curtain,false);assert.ok(bad.head[1]>1.6);assert.ok(f.camera.quaternion.angleTo(bad.tracking)<1e-7);assert.equal(tour.state.active,true);
- assert.equal(f.camera.parent.rotation.x,0);assert.equal(f.camera.parent.rotation.z,0);f.mode.tourAction('stop');await f.mode.end();assert.deepEqual(f.errors,[]);
+ assert.ok(Math.abs(f.camera.parent.rotation.x)<1e-7);assert.ok(Math.abs(f.camera.parent.rotation.z)<1e-7);f.mode.tourAction('stop');await f.mode.end();assert.deepEqual(f.errors,[]);
 });

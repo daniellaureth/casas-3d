@@ -8,25 +8,58 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   const head = new Vector3(), direction = new Vector3();
   // The tour follows a stable virtual body. Tracked head motion must not move
   // the route's arrival target or be canceled by translating the rig backwards.
-  const tourBody={x:0,y:0,z:0};let tourOwner=null,seatedHeadYaw=0;
+  const tourBody={x:0,y:0,z:0};let tourOwner=null,seatedHeadYaw=0,tourTilt=0,tourTiltSpeed=0,tourBaseHeading=null;
   const turnPivot=new Vector3(),turnAfter=new Vector3(),seatedEye=new Vector3();
   function calibrateSeatedTour(){
+    tourBaseHeading=null;
     camera.getWorldDirection(direction);
     // Capture the seated forward direction once. Never chase sideways head turns.
     seatedHeadYaw=Math.atan2(-direction.x,-direction.z)-rig.rotation.y;
     camera.getWorldPosition(seatedEye);rig.worldToLocal(seatedEye);
   }
-  function guideTourHeading(tour){
-    if(!Number.isFinite(tour?.state.heading))return;
-    const yaw=tour.state.heading-seatedHeadYaw;
-    const changed=Math.abs(yaw-rig.rotation.y)>=1e-8,c=Math.cos(yaw),s=Math.sin(yaw),scale=rig.scale.x;
+  function levelTourBase(){
+    if(Math.abs(tourTilt)<1e-9&&!tourTiltSpeed)return;
+    camera.getWorldPosition(turnPivot);camera.getWorldDirection(direction);
+    const worldYaw=Math.atan2(-direction.x,-direction.z);
+    turnAfter.set(0,0,-1).applyQuaternion(camera.quaternion);
+    rig.rotation.set(0,worldYaw-Math.atan2(-turnAfter.x,-turnAfter.z),0,'YXZ');
+    rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);camera.getWorldPosition(turnAfter);
+    rig.position.add(turnPivot.sub(turnAfter));tourTilt=0;tourTiltSpeed=0;
+    rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);
+  }
+  function guideTourHeading(tour,delta){
+    if(!tour?.state.active||!Number.isFinite(tour.state.heading)){levelTourBase();return;}
+    const oldTilt=tourTilt,dt=Math.min(.05,delta),floor=getPhysics().floorAt(tourBody.x,tourBody.z);
+    const indoors=Number.isFinite(tour.heightLimit?.(tourBody));
+    if(indoors){tourTilt=0;tourTiltSpeed=0;}
+    else if(!tour.state.paused){
+      const focus=tour.state.focus,blend=Math.max(0,Math.min(1,(tourBody.y-floor-2.5)/5.5));
+      const wanted=focus?Math.max(-1.25,Math.min(0,Math.atan2(focus.y-tourBody.y,Math.hypot(focus.x-tourBody.x,focus.z-tourBody.z))))*blend*blend*(3-2*blend):0;
+      const target=Math.max(-.21,Math.min(.21,(wanted-tourTilt)*1.5));
+      tourTiltSpeed+=Math.max(-.17*dt,Math.min(.17*dt,target-tourTiltSpeed));
+      tourTilt+=tourTiltSpeed*dt;
+    }
+    const changed=!Number.isFinite(tourBaseHeading)||Math.abs(tour.state.heading-tourBaseHeading)>=1e-8||Math.abs(oldTilt-tourTilt)>1e-8,scale=rig.scale.x;
+    tourBaseHeading=tour.state.heading;
     // Anchor the neutral seated eye to the route, not the current sideways look.
     // Turning around different live head poses would accumulate position drift.
-    rig.rotation.y=yaw;
-    rig.position.x=tourBody.x-scale*(c*seatedEye.x+s*seatedEye.z);
-    rig.position.z=tourBody.z-scale*(-s*seatedEye.x+c*seatedEye.z);
-    rig.position.y=tourBody.y-scale*seatedEye.y;
+    // Tilt the presentation base, never the native tracked camera. Calibrated
+    // forward stays correct even when the visitor started facing sideways.
+    rig.rotation.set(tourTilt,tour.state.heading,0,'YXZ');rig.rotateY(-seatedHeadYaw);
+    turnAfter.copy(seatedEye).multiplyScalar(scale).applyQuaternion(rig.quaternion);
+    rig.position.set(tourBody.x-turnAfter.x,tourBody.y-turnAfter.y,tourBody.z-turnAfter.z);
     rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);
+    camera.getWorldPosition(turnAfter);
+    const ceiling=tour.heightLimit?.(turnAfter)??Infinity;
+    if(turnAfter.y>ceiling){
+      const excess=turnAfter.y-ceiling;turnAfter.y=ceiling;rig.position.y-=excess;
+      // Respect the indoor eye-height cap even if the seated visitor lifts their
+      // head. Retain native orientation and never lower a leaned eye into a mesh.
+      if(tour.validHead&&!tour.validHead(tourBody,turnAfter)){
+        rig.position.x+=tourBody.x-turnAfter.x;rig.position.y+=tourBody.y-turnAfter.y;rig.position.z+=tourBody.z-turnAfter.z;
+      }
+      rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);
+    }
     if(changed&&panel?.visible){camera.getWorldPosition(turnPivot);camera.getWorldDirection(turnAfter);panel.place?.(turnPivot,turnAfter);}
   }
   const rayOrigin=new Vector3(),rayDirection=new Vector3();
@@ -90,7 +123,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     controls.enabled = saved.enabled;
     renderer.shadowMap.enabled = saved.shadows;
     renderer.shadowMap.needsUpdate = true;
-    saved = null; session = null; rig = null; curtain = null; lastSafeHead = null;
+    saved = null; session = null; rig = null; curtain = null; lastSafeHead = null;tourOwner=null;tourTilt=0;tourTiltSpeed=0;
     document.body.classList.remove('in-vr');
     button.textContent = entryLabel;
     button.disabled = false;
@@ -158,6 +191,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
   }
   function tourCommand(action){
     if(loading)return 'Aguarde o carregamento do VR.';
+    if(action==='start')levelTourBase();
     camera.getWorldPosition(head);const tour=getTour();
     if(action==='start'||tourOwner!==tour){tourBody.x=head.x;tourBody.y=head.y;tourBody.z=head.z;tourOwner=tour;calibrateSeatedTour();}
     const beforeX=tourBody.x,beforeY=tourBody.y,beforeZ=tourBody.z;
@@ -166,7 +200,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       if(action==='stop'){
         if(Math.hypot(tourBody.x-beforeX,tourBody.y-beforeY,tourBody.z-beforeZ)>.05)recoveryFade=1;
         rig.position.x+=tourBody.x-beforeX;rig.position.y+=tourBody.y-beforeY;rig.position.z+=tourBody.z-beforeZ;
-        floorLevel=tourBody.y-getPhysics().eyeHeight;
+        floorLevel=tourBody.y-getPhysics().eyeHeight;levelTourBase();
         rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);camera.getWorldPosition(head);
         lastSafeHead={x:head.x,y:head.y,z:head.z};
       }
@@ -258,7 +292,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
     if(menuDown&&!menuPressed&&panel){if(panel.visible)panel.close();else panel.open(head,direction);}menuPressed=menuDown;
     const tour=getTour();
     const automatic=!!tour?.state.active;
-    if(!automatic)tourOwner=null;
+    if(!automatic){if(tourOwner)levelTourBase();tourOwner=null;}
     else if(tourOwner!==tour){tourBody.x=head.x;tourBody.y=head.y;tourBody.z=head.z;tourOwner=tour;calibrateSeatedTour();}
     if(automatic&&(curtain.visible||(tour.validHead&&!tour.validHead(lastSafeHead,head)))){
       // Recover before rendering, rather than trapping the tour behind a black curtain.
@@ -286,7 +320,7 @@ function createQuestVR({ renderer, scene, camera, controls, Group, Vector3, make
       const moveX=body.x-fromX,moveZ=body.z-fromZ;
       rig.position.x += moveX; rig.position.z += moveZ;
       const nextFloor=body.y-physics.eyeHeight,moveY=nextFloor-floorLevel;rig.position.y+=moveY;floorLevel=nextFloor;
-      if(automatic)guideTourHeading(tour);
+      if(automatic)guideTourHeading(tour,delta);
       if (Math.abs(turn)<0.25) snapReady=true;
       if (Math.abs(turn)>0.65 && snapReady) {
         snapReady=false;
